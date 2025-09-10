@@ -13,7 +13,24 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+      },
       colors: {
+        // Dashboard specific colors
+        'dashboard-bg': 'hsl(var(--background))',
+        'card-bg': 'hsl(var(--card-background))',
+        'primary-blue': 'hsl(var(--primary))',
+        'success-green': 'hsl(var(--success))',
+        'warning-yellow': 'hsl(var(--warning))',
+        'danger-red': 'hsl(var(--danger))',
+        'info-blue': 'hsl(var(--info))',
+        
+        // Status variants
+        'success-light': 'hsl(var(--success-light))',
+        'warning-light': 'hsl(var(--warning-light))',
+        'danger-light': 'hsl(var(--danger-light))',
+        'info-light': 'hsl(var(--info-light))',
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
