@@ -50,12 +50,7 @@ const StudentFeedback: React.FC = () => {
   ];
 
   const handleSubmit = async () => {
-    if (!feedback.trim() || !category) {
-      toast({
-        title: "Missing Information",
-        description: "Please provide feedback text and select a category.",
-        variant: "destructive"
-      });
+    if (feedback.length < 1) {
       return;
     }
 
@@ -64,8 +59,8 @@ const StudentFeedback: React.FC = () => {
     // Simulate API call
     setTimeout(() => {
       toast({
-        title: "Feedback Submitted!",
-        description: "Your anonymous feedback has been sent to the administration. Thank you for helping us improve!"
+        title: "Feedback Submitted",
+        description: "Your feedback has been submitted successfully!"
       });
       setFeedback('');
       setCategory('');
@@ -143,7 +138,7 @@ const StudentFeedback: React.FC = () => {
 
           <Button 
             onClick={handleSubmit} 
-            disabled={isSubmitting || !feedback.trim() || !category}
+            disabled={isSubmitting || feedback.length < 1}
             className="w-full"
           >
             {isSubmitting ? (

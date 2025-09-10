@@ -42,15 +42,15 @@ export const studentData = {
       id: '2',
       subject: 'Physics',
       title: 'Lab Report',
-      dueDate: '2024-09-10',
-      status: 'overdue',
-      isOverdue: true
+      dueDate: '2024-09-14',
+      status: 'pending',
+      isOverdue: false
     },
     {
       id: '3',
       subject: 'Computer Science',
       title: 'Algorithm Implementation',
-      dueDate: '2024-09-20',
+      dueDate: '2024-09-16',
       status: 'completed',
       isOverdue: false
     }
@@ -79,9 +79,9 @@ export const classData = {
       { risk: 'High', count: 5, fill: '#ef4444' }
     ],
     
-    students: Array.from({ length: 20 }, (_, i) => ({
+    students: Array.from({ length: 40 }, (_, i) => ({
       id: `anon-${i + 1}`,
-      briScore: Math.floor(Math.random() * 40) + 40, // 40-80 range
+      briScore: Math.floor(Math.random() * 60) + 25, // 25-85 range
       trend: Array.from({ length: 10 }, () => Math.floor(Math.random() * 30) + 50),
       riskLevel: ['low', 'medium', 'high'][Math.floor(Math.random() * 3)]
     }))
@@ -108,9 +108,9 @@ export const classData = {
       { risk: 'High', count: 3, fill: '#ef4444' }
     ],
     
-    students: Array.from({ length: 20 }, (_, i) => ({
-      id: `anon-${i + 21}`,
-      briScore: Math.floor(Math.random() * 40) + 50, // 50-90 range
+    students: Array.from({ length: 38 }, (_, i) => ({
+      id: `anon-${i + 41}`,
+      briScore: Math.floor(Math.random() * 60) + 30, // 30-90 range
       trend: Array.from({ length: 10 }, () => Math.floor(Math.random() * 30) + 60),
       riskLevel: ['low', 'medium', 'high'][Math.floor(Math.random() * 3)]
     }))

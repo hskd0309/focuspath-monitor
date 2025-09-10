@@ -37,7 +37,7 @@ const StudentLayout: React.FC = () => {
     <div className="min-h-screen bg-dashboard-bg">
       <Navigation
         userType="student"
-        userName="John Doe"
+        userName="STU001"
         currentPage={currentPage}
         onPageChange={setCurrentPage}
       />

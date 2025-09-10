@@ -99,7 +99,7 @@ const ChatBot: React.FC = () => {
           
           <CardContent className="flex-1 flex flex-col p-4">
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto space-y-3 mb-4">
+            <div className="flex-1 overflow-y-auto space-y-3 mb-4 max-h-72 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
               {messages.map((message) => (
                 <div
                   key={message.id}

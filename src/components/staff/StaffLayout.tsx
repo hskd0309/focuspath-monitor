@@ -30,7 +30,7 @@ const StaffLayout: React.FC = () => {
     <div className="min-h-screen bg-dashboard-bg">
       <Navigation
         userType="staff"
-        userName="Dr. Sarah Johnson"
+        userName="STAFF001"
         currentPage={currentPage}
         onPageChange={setCurrentPage}
       />

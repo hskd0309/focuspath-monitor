@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 import { User, Brain, TrendingUp, AlertTriangle, Calendar, BookOpen } from 'lucide-react';
 import { studentData } from '@/data/mockData';
 
@@ -50,8 +50,8 @@ const StudentProfile: React.FC = () => {
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Student Wellness Profile</h1>
-        <p className="text-gray-600">Detailed analysis of your Burnout Risk Index and contributing factors</p>
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">My Analytics Dashboard</h1>
+        <p className="text-gray-600">Comprehensive view of your academic performance and wellness metrics</p>
       </div>
 
       {/* Current BRI Status */}
@@ -215,6 +215,117 @@ const StudentProfile: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Study Patterns & Academic Performance */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Weekly Study Hours */}
+        <Card className="chart-container">
+          <CardHeader>
+            <CardTitle>Weekly Study Pattern</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={[
+                { day: 'Mon', hours: 6, productivity: 85 },
+                { day: 'Tue', hours: 5, productivity: 78 },
+                { day: 'Wed', hours: 8, productivity: 92 },
+                { day: 'Thu', hours: 4, productivity: 65 },
+                { day: 'Fri', hours: 3, productivity: 58 },
+                { day: 'Sat', hours: 7, productivity: 88 },
+                { day: 'Sun', hours: 2, productivity: 45 }
+              ]}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="day" stroke="#6b7280" />
+                <YAxis stroke="#6b7280" />
+                <Bar dataKey="hours" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Subject Performance Distribution */}
+        <Card className="chart-container">
+          <CardHeader>
+            <CardTitle>Subject Performance</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={studentData.subjectMarks.map(subject => ({
+                    name: subject.subject,
+                    value: subject.marks,
+                    fill: subject.marks >= 80 ? '#22c55e' : subject.marks >= 70 ? '#3b82f6' : subject.marks >= 60 ? '#f59e0b' : '#ef4444'
+                  }))}
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={80}
+                  dataKey="value"
+                  label={({ name, value }) => `${name}: ${value}%`}
+                >
+                  {studentData.subjectMarks.map((entry, index) => (
+                    <Cell key={`cell-${index}`} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Monthly Progress & Sleep Pattern */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Monthly Performance Trend */}
+        <Card className="chart-container">
+          <CardHeader>
+            <CardTitle>Monthly Performance Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={[
+                { month: 'Jan', marks: 75, attendance: 82, assignments: 88 },
+                { month: 'Feb', marks: 78, attendance: 85, assignments: 90 },
+                { month: 'Mar', marks: 82, attendance: 79, assignments: 85 },
+                { month: 'Apr', marks: 78, attendance: 85, assignments: 92 },
+                { month: 'May', marks: 80, attendance: 88, assignments: 89 },
+                { month: 'Jun', marks: 85, attendance: 85, assignments: 94 }
+              ]}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="month" stroke="#6b7280" />
+                <YAxis stroke="#6b7280" />
+                <Area type="monotone" dataKey="marks" stackId="1" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
+                <Area type="monotone" dataKey="attendance" stackId="2" stroke="#22c55e" fill="#22c55e" fillOpacity={0.3} />
+                <Area type="monotone" dataKey="assignments" stackId="3" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.3} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Sleep & Wellness Pattern */}
+        <Card className="chart-container">
+          <CardHeader>
+            <CardTitle>Sleep & Wellness Pattern</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={[
+                { week: 'Week 1', sleep: 7.5, stress: 6, energy: 8 },
+                { week: 'Week 2', sleep: 6.8, stress: 7, energy: 7 },
+                { week: 'Week 3', sleep: 7.2, stress: 5, energy: 8.5 },
+                { week: 'Week 4', sleep: 6.5, stress: 8, energy: 6 },
+                { week: 'Week 5', sleep: 7.8, stress: 4, energy: 9 }
+              ]}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="week" stroke="#6b7280" />
+                <YAxis stroke="#6b7280" domain={[0, 10]} />
+                <Line type="monotone" dataKey="sleep" stroke="#8b5cf6" strokeWidth={2} name="Sleep Hours" />
+                <Line type="monotone" dataKey="stress" stroke="#ef4444" strokeWidth={2} name="Stress Level" />
+                <Line type="monotone" dataKey="energy" stroke="#22c55e" strokeWidth={2} name="Energy Level" />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* Support Resources */}
       <Card className="dashboard-card">
