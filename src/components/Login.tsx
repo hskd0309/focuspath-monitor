@@ -6,6 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { GraduationCap, Users, Shield, Heart } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/use-toast';
 
 interface LoginFormData {
   email?: string;
@@ -17,26 +19,63 @@ interface LoginFormData {
 const Login: React.FC = () => {
   const [userType, setUserType] = useState<'student' | 'staff' | 'admin' | 'counsellor'>('student');
   const [formData, setFormData] = useState<LoginFormData>({ password: '' });
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { signIn } = useAuth();
+  const { toast } = useToast();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Simple validation
+    
+    // Validation
     if (userType === 'student' && (!formData.rollNo || !formData.class)) {
-      alert('Please fill all student fields');
+      toast({
+        title: "Error",
+        description: "Please fill all student fields",
+        variant: "destructive"
+      });
       return;
     }
     if (userType !== 'student' && !formData.email) {
-      alert('Please enter email');
+      toast({
+        title: "Error", 
+        description: "Please enter email",
+        variant: "destructive"
+      });
       return;
     }
     if (!formData.password) {
-      alert('Please enter password');
+      toast({
+        title: "Error",
+        description: "Please enter password", 
+        variant: "destructive"
+      });
       return;
     }
 
-    // Navigate to appropriate dashboard
-    navigate(`/${userType}`);
+    setLoading(true);
+
+    const credentials = userType === 'student' 
+      ? { roll_no: formData.rollNo, password: formData.password, class: formData.class }
+      : { email: formData.email, password: formData.password };
+
+    const { error } = await signIn(credentials);
+
+    if (error) {
+      toast({
+        title: "Login Failed",
+        description: error,
+        variant: "destructive"
+      });
+    } else {
+      toast({
+        title: "Login Successful",
+        description: "Welcome back!",
+      });
+      navigate(`/${userType}`);
+    }
+
+    setLoading(false);
   };
 
   const userTypeConfig = {
@@ -159,8 +198,8 @@ const Login: React.FC = () => {
                 />
               </div>
 
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 h-12">
-                Sign In
+              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 h-12" disabled={loading}>
+                {loading ? 'Signing In...' : 'Sign In'}
               </Button>
             </form>
 
