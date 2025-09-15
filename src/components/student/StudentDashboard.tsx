@@ -2,10 +2,37 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, TrendingDown, Calendar, CheckCircle, AlertCircle, Smile } from 'lucide-react';
-import { studentData } from '@/data/mockData';
+import { useStudentData } from '@/hooks/useStudentData';
+import { Button } from '@/components/ui/button';
 
 const StudentDashboard: React.FC = () => {
-  const { briScore, attendance, avgMarks, assignmentsOnTime, sentiment, briHistory, attendanceData } = studentData;
+  const { studentData, loading, refreshBRI } = useStudentData();
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading dashboard...</div>;
+  }
+
+  if (!studentData) {
+    return <div className="flex items-center justify-center min-h-screen">No student data found</div>;
+  }
+
+  const briScore = Math.round(studentData.current_bri * 100);
+  const attendance = studentData.overall_attendance_percentage;
+  const avgMarks = studentData.average_marks;
+  const assignmentsOnTime = studentData.assignments_on_time_percentage;
+  
+  // Mock BRI history data for chart (would come from bri_snapshots in real implementation)
+  const briHistory = [
+    { month: 'Jan', score: 65 },
+    { month: 'Feb', score: 70 },
+    { month: 'Mar', score: 68 },
+    { month: 'Apr', score: briScore },
+  ];
+
+  const attendanceData = [
+    { name: 'Present', value: attendance, fill: '#10b981' },
+    { name: 'Absent', value: 100 - attendance, fill: '#ef4444' }
+  ];
 
   const getBriColor = (score: number) => {
     if (score >= 70) return 'text-green-600';
@@ -102,10 +129,10 @@ const StudentDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Sentiment</p>
-                <p className="text-lg font-bold text-gray-700 capitalize">{sentiment}</p>
+                <p className="text-lg font-bold text-gray-700 capitalize">Neutral</p>
                 <p className="text-xs text-gray-500 mt-1">Latest mood</p>
               </div>
-              {getSentimentIcon(sentiment)}
+              {getSentimentIcon('neutral')}
             </div>
           </CardContent>
         </Card>

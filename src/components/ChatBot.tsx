@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MessageCircle, X, Send } from 'lucide-react';
+import { MessageCircle, X, Send, Bot, User } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Message {
   id: string;
@@ -23,7 +25,9 @@ const ChatBot: React.FC = () => {
   ]);
   const [inputValue, setInputValue] = useState('');
 
-  const handleSendMessage = () => {
+  const { user } = useAuth();
+
+  const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
     const userMessage: Message = {
@@ -34,19 +38,37 @@ const ChatBot: React.FC = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
-
-    // Simulate bot response
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        text: getBotResponse(inputValue),
-        sender: 'bot',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, botResponse]);
-    }, 1000);
-
+    const messageText = inputValue;
     setInputValue('');
+
+    try {
+      // Store conversation and analyze sentiment
+      if (user) {
+        await supabase.from('chatbot_conversations').insert({
+          user_id: user.id,
+          message: messageText,
+          response: getBotResponse(messageText)
+        });
+
+        // Analyze sentiment
+        await supabase.functions.invoke('ml-sentiment-analysis', {
+          body: { text: messageText, type: 'chatbot' }
+        });
+      }
+
+      // Bot response
+      setTimeout(() => {
+        const botResponse: Message = {
+          id: (Date.now() + 1).toString(),
+          text: getBotResponse(messageText),
+          sender: 'bot',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, botResponse]);
+      }, 1000);
+    } catch (error) {
+      console.error('Chatbot error:', error);
+    }
   };
 
   const getBotResponse = (input: string): string => {

@@ -73,13 +73,28 @@ const Navigation: React.FC<NavigationProps> = ({ userType, userName, currentPage
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo and Navigation Links */}
-          <div className="flex items-center space-x-8">
+          <div className="flex items-center space-x-4 md:space-x-8">
             <div className="flex-shrink-0 flex items-center">
-              <span className="text-2xl font-bold text-blue-600">ERP</span>
-              <span className="ml-1 text-sm text-gray-500 capitalize">{userType}</span>
+              <span className="text-xl md:text-2xl font-bold text-blue-600">ERP</span>
+              <span className="ml-1 text-xs md:text-sm text-gray-500 capitalize">{userType}</span>
             </div>
 
-            {/* Navigation Menu */}
+            {/* Mobile Navigation Menu */}
+            <div className="md:hidden">
+              <select 
+                value={currentPage} 
+                onChange={(e) => onPageChange(e.target.value)}
+                className="text-sm border border-gray-300 rounded px-2 py-1"
+              >
+                {menuItems.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Desktop Navigation Menu */}
             <div className="hidden md:flex space-x-1">
               {menuItems.map((item) => (
                 <button

@@ -85,6 +85,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       
+      // Admin hardcoded login (not in database)
+      if (credentials.email === 'admin@erp.edu' && credentials.password === 'admin123') {
+        const adminProfile = {
+          id: 'admin-001',
+          user_id: 'admin-001',
+          role: 'admin' as const,
+          email: 'admin@erp.edu',
+          full_name: 'System Administrator',
+          is_active: true
+        };
+        
+        setProfile(adminProfile);
+        
+        const mockUser = {
+          id: 'admin-001',
+          email: 'admin@erp.edu',
+          user_metadata: { full_name: 'System Administrator' },
+          app_metadata: {},
+          aud: 'authenticated',
+          created_at: new Date().toISOString()
+        } as unknown as User;
+        
+        setUser(mockUser);
+        return { error: undefined };
+      }
+      
       // Determine login type based on credentials
       let response;
       if (credentials.roll_no) {
@@ -98,7 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         });
       } else {
-        // Staff login
+        // Staff/Counsellor login
         response = await supabase.functions.invoke('auth-handler', {
           body: {
             action: 'staff_login',
