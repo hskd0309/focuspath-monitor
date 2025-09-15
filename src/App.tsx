@@ -9,6 +9,7 @@ import Login from "./components/Login";
 import StudentLayout from "./components/student/StudentLayout";
 import StaffLayout from "./components/staff/StaffLayout";
 import CounsellorLayout from "./components/counsellor/CounsellorLayout";
+import AdminLayout from "./components/admin/AdminLayout";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 const queryClient = new QueryClient();
@@ -53,7 +54,7 @@ function AppRoutes() {
         path="/admin" 
         element={
           <ProtectedRoute allowedRoles={['admin']}>
-            <StaffLayout />
+            <AdminLayout />
           </ProtectedRoute>
         } 
       />

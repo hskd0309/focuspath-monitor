@@ -1,28 +1,122 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useStudentData } from '@/hooks/useStudentData';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Send, Users, MessageCircle, Heart, ThumbsUp } from 'lucide-react';
-import { chatMessages } from '@/data/mockData';
+import { useToast } from '@/hooks/use-toast';
 
 const StudentGroupChat: React.FC = () => {
+  const { profile } = useAuth();
+  const { studentData } = useStudentData(profile);
   const [newMessage, setNewMessage] = useState('');
-  const [messages, setMessages] = useState(chatMessages);
+  const [messages, setMessages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
+  React.useEffect(() => {
+    fetchMessages();
+    // Set up real-time subscription
+    const subscription = supabase
+      .channel('group_chat')
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'group_chat_messages' },
+        (payload) => {
+          const newMsg = {
+            id: payload.new.id,
+            sender: `Anon-${Math.floor(Math.random() * 999) + 1}`,
+            message: payload.new.message,
+            timestamp: new Date(payload.new.created_at).toLocaleString(),
+            sentiment: payload.new.sentiment_label?.toLowerCase() || 'neutral'
+          };
+          setMessages(prev => [...prev, newMsg]);
+        }
+      )
+      .subscribe();
 
-    const message = {
-      id: (messages.length + 1).toString(),
-      sender: 'Anon-005',
-      message: newMessage,
-      timestamp: new Date().toLocaleString(),
-      sentiment: 'neutral'
+    return () => {
+      subscription.unsubscribe();
     };
+  }, []);
 
-    setMessages([...messages, message]);
-    setNewMessage('');
+  const fetchMessages = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('group_chat_messages')
+        .select(`
+          id,
+          message,
+          sentiment_label,
+          created_at,
+          students!inner(
+            profiles!inner(class)
+          )
+        `)
+        .eq('students.profiles.class', profile?.class)
+        .order('created_at', { ascending: true })
+        .limit(50);
+
+      if (error) throw error;
+
+      const formattedMessages = data?.map((msg, index) => ({
+        id: msg.id,
+        sender: `Anon-${String(index + 1).padStart(3, '0')}`,
+        message: msg.message,
+        timestamp: new Date(msg.created_at).toLocaleString(),
+        sentiment: msg.sentiment_label?.toLowerCase() || 'neutral'
+      })) || [];
+
+      setMessages(formattedMessages);
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return;
+    if (!studentData) {
+      toast({
+        title: "Error",
+        description: "Unable to send message. Please try again.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    try {
+      // Analyze sentiment first
+      const { data: sentimentData, error: sentimentError } = await supabase.functions.invoke('ml-sentiment-analysis', {
+        body: { text: newMessage, type: 'chat' }
+      });
+
+      if (sentimentError) throw sentimentError;
+
+      // Insert message
+      const { error: insertError } = await supabase
+        .from('group_chat_messages')
+        .insert({
+          student_id: studentData.id,
+          message: newMessage,
+          sentiment_score: sentimentData.sentiment_score,
+          sentiment_label: sentimentData.sentiment_label
+        });
+
+      if (insertError) throw insertError;
+
+      setNewMessage('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const getSentimentBadge = (sentiment: string) => {

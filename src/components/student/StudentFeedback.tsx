@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -8,37 +10,47 @@ import { MessageSquare, Send, CheckCircle, Clock, Star } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 const StudentFeedback: React.FC = () => {
+  const { profile } = useAuth();
   const [feedback, setFeedback] = useState('');
   const [category, setCategory] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submittedFeedback, setSubmittedFeedback] = useState([]);
   const { toast } = useToast();
 
-  const [submittedFeedback] = useState([
-    {
-      id: '1',
-      text: 'The new cafeteria menu has really improved!',
-      category: 'facilities',
-      status: 'reviewed',
-      submittedDate: '2024-09-05',
-      response: 'Thank you for your feedback! We\'re glad you\'re enjoying the new menu options.'
-    },
-    {
-      id: '2',
-      text: 'Would like more study spaces in the library',
-      category: 'academic',
-      status: 'pending',
-      submittedDate: '2024-09-03',
-      response: null
-    },
-    {
-      id: '3',
-      text: 'The math course workload feels overwhelming',
-      category: 'academic',
-      status: 'in-review',
-      submittedDate: '2024-09-01',
-      response: null
+  React.useEffect(() => {
+    fetchSubmittedFeedback();
+  }, []);
+
+  const fetchSubmittedFeedback = async () => {
+    try {
+      // For demo purposes, show recent complaints from the same class
+      const { data, error } = await supabase
+        .from('complaints')
+        .select('*')
+        .eq('class', profile?.class)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+      
+      const formattedFeedback = data?.map(complaint => ({
+        id: complaint.id,
+        text: complaint.content,
+        category: complaint.category,
+        status: 'reviewed',
+        submittedDate: new Date(complaint.created_at).toLocaleDateString(),
+        response: complaint.sentiment_label === 'Positive' 
+          ? 'Thank you for your positive feedback!'
+          : complaint.sentiment_label === 'Negative'
+          ? 'We appreciate your feedback and are working to address this issue.'
+          : 'Thank you for your feedback.'
+      })) || [];
+      
+      setSubmittedFeedback(formattedFeedback);
+    } catch (error) {
+      console.error('Error fetching feedback:', error);
     }
-  ]);
+  };
 
   const categories = [
     { value: 'academic', label: 'Academic & Courses' },
@@ -50,22 +62,56 @@ const StudentFeedback: React.FC = () => {
   ];
 
   const handleSubmit = async () => {
-    if (feedback.length < 1) {
+    if (feedback.length < 10 || !category) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields with at least 10 characters",
+        variant: "destructive"
+      });
       return;
     }
 
     setIsSubmitting(true);
     
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // Analyze sentiment first
+      const { data: sentimentData, error: sentimentError } = await supabase.functions.invoke('ml-sentiment-analysis', {
+        body: { text: feedback, type: 'complaint' }
+      });
+
+      if (sentimentError) throw sentimentError;
+
+      // Submit complaint anonymously
+      const { error: insertError } = await supabase
+        .from('complaints')
+        .insert({
+          content: feedback,
+          category,
+          sentiment_score: sentimentData.sentiment_score,
+          sentiment_label: sentimentData.sentiment_label,
+          class: profile?.class
+        });
+
+      if (insertError) throw insertError;
+
       toast({
         title: "Feedback Submitted",
-        description: "Your feedback has been submitted successfully!"
+        description: "Your anonymous feedback has been submitted successfully!"
       });
+      
       setFeedback('');
       setCategory('');
+      fetchSubmittedFeedback();
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      toast({
+        title: "Error",
+        description: "Failed to submit feedback. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
       setIsSubmitting(false);
-    }, 1500);
+    }
   };
 
   const getStatusBadge = (status: string) => {

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
 import ChatBot from '@/components/ChatBot';
 import CounsellorDashboard from './CounsellorDashboard';
@@ -7,6 +8,7 @@ import CounsellingSessions from './CounsellingSessions';
 import WellnessReports from './WellnessReports';
 
 const CounsellorLayout: React.FC = () => {
+  const { profile } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
 
   const renderPage = () => {
@@ -28,7 +30,7 @@ const CounsellorLayout: React.FC = () => {
     <div className="min-h-screen bg-dashboard-bg">
       <Navigation
         userType="counsellor"
-        userName="COUNS001"
+        userName={profile?.full_name || "COUNS001"}
         currentPage={currentPage}
         onPageChange={setCurrentPage}
       />

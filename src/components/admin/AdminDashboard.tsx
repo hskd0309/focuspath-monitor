@@ -3,14 +3,15 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useStaffData } from '@/hooks/useStaffData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { Users, AlertTriangle, Calendar, TrendingDown, ArrowRight, Eye } from 'lucide-react';
+import { Users, AlertTriangle, Calendar, TrendingDown, ArrowRight, Eye, Settings, UserPlus } from 'lucide-react';
 
-interface StaffDashboardProps {
+interface AdminDashboardProps {
   onPageChange: (page: string) => void;
 }
 
-const StaffDashboard: React.FC<StaffDashboardProps> = ({ onPageChange }) => {
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ onPageChange }) => {
   const { profile } = useAuth();
   const { cseKStats, cseDStats, cseKStudents, cseDStudents, loading } = useStaffData(profile);
 
@@ -26,7 +27,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ onPageChange }) => {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
-          <p className="text-gray-600">Unable to load class data</p>
+          <p className="text-gray-600">Unable to load system data</p>
         </div>
       </div>
     );
@@ -38,6 +39,12 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ onPageChange }) => {
     totalHighRisk: cseKStats.high_risk_count + cseDStats.high_risk_count,
     avgAttendance: Math.round((cseKStats.avg_attendance + cseDStats.avg_attendance) / 2)
   };
+
+  // Get top 6 highest risk students
+  const allStudents = [...cseKStudents, ...cseDStudents];
+  const topRiskStudents = allStudents
+    .sort((a, b) => a.current_bri - b.current_bri) // Lower BRI = higher risk
+    .slice(0, 6);
 
   const classComparison = [
     {
@@ -54,16 +61,11 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ onPageChange }) => {
     }
   ];
 
-  // Generate weekly trend from current data (in production, this would come from BRI snapshots)
   const weeklyTrend = Array.from({ length: 5 }, (_, i) => ({
     week: `Week ${i + 1}`,
     cseK: Math.max(0, Math.round(cseKStats.avg_bri * 100) - (4 - i) * 2 + Math.random() * 4),
     cseD: Math.max(0, Math.round(cseDStats.avg_bri * 100) - (4 - i) * 2 + Math.random() * 4)
   }));
-
-  const handleClassClick = (className: string) => {
-    onPageChange(className.toLowerCase());
-  };
 
   const getBriColor = (score: number) => {
     if (score >= 70) return 'text-green-600';
@@ -81,8 +83,8 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ onPageChange }) => {
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Staff Dashboard</h1>
-        <p className="text-gray-600">Monitor student wellbeing across CSE-K and CSE-D classes</p>
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">Admin Dashboard</h1>
+        <p className="text-gray-600">System overview and management controls</p>
       </div>
 
       {/* Overall Stats */}
@@ -144,14 +146,54 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ onPageChange }) => {
         </Card>
       </div>
 
+      {/* Top Risk Students Panel */}
+      <Card className="dashboard-card bg-gradient-to-r from-red-50 to-pink-50 border-red-200">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-red-800">
+            <AlertTriangle className="w-5 h-5" />
+            Top 6 Highest Risk Students - Immediate Attention Required
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {topRiskStudents.map((student) => (
+              <Card key={student.id} className="bg-white border-red-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold">{student.anonymized_id}</h3>
+                    <Badge className="bg-red-100 text-red-800 text-xs">CRITICAL</Badge>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">BRI:</span>
+                      <span className={`font-bold ${getBriColor(Math.round(student.current_bri * 100))}`}>
+                        {Math.round(student.current_bri * 100)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Class:</span>
+                      <span className="font-medium">{student.profiles?.class}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Attendance:</span>
+                      <span className="font-medium">{Math.round(student.overall_attendance_percentage)}%</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Class Comparison Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* CSE-K Class Card */}
-        <Card className="dashboard-card hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => handleClassClick('CSE-K')}>
+        <Card className="dashboard-card hover:shadow-lg transition-shadow">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl">CSE-K Class Overview</CardTitle>
-              <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button variant="ghost" size="sm">
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
@@ -189,11 +231,11 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ onPageChange }) => {
         </Card>
 
         {/* CSE-D Class Card */}
-        <Card className="dashboard-card hover:shadow-lg transition-shadow cursor-pointer group" onClick={() => handleClassClick('CSE-D')}>
+        <Card className="dashboard-card hover:shadow-lg transition-shadow">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-xl">CSE-D Class Overview</CardTitle>
-              <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button variant="ghost" size="sm">
                 <ArrowRight className="w-4 h-4" />
               </Button>
             </div>
@@ -285,7 +327,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ onPageChange }) => {
       {/* Quick Actions */}
       <Card className="dashboard-card">
         <CardHeader>
-          <CardTitle>Quick Actions</CardTitle>
+          <CardTitle>Admin Quick Actions</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -294,8 +336,24 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ onPageChange }) => {
               className="h-20 flex flex-col items-center justify-center space-y-2"
               onClick={() => onPageChange('students')}
             >
+              <UserPlus className="w-6 h-6" />
+              <span>Manage Students</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="h-20 flex flex-col items-center justify-center space-y-2"
+              onClick={() => onPageChange('staff')}
+            >
               <Eye className="w-6 h-6" />
-              <span>View All Students</span>
+              <span>Data Management</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="h-20 flex flex-col items-center justify-center space-y-2"
+              onClick={() => onPageChange('settings')}
+            >
+              <Settings className="w-6 h-6" />
+              <span>ML Settings</span>
             </Button>
             <Button 
               variant="outline" 
@@ -303,41 +361,25 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ onPageChange }) => {
               onClick={() => onPageChange('reports')}
             >
               <TrendingDown className="w-6 h-6" />
-              <span>Generate Report</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="h-20 flex flex-col items-center justify-center space-y-2"
-              onClick={() => onPageChange('cse-k')}
-            >
-              <Users className="w-6 h-6" />
-              <span>CSE-K Analytics</span>
-            </Button>
-            <Button 
-              variant="outline" 
-              className="h-20 flex flex-col items-center justify-center space-y-2"
-              onClick={() => onPageChange('cse-d')}
-            >
-              <Users className="w-6 h-6" />
-              <span>CSE-D Analytics</span>
+              <span>Generate Reports</span>
             </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Alerts & Notifications */}
-      {(cseKStats.high_risk_count > 3 || cseDStats.high_risk_count > 3) && (
+      {/* System Alerts */}
+      {overallStats.totalHighRisk > 5 && (
         <Card className="dashboard-card bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200">
           <CardContent className="p-6">
             <div className="flex items-start space-x-4">
               <AlertTriangle className="w-6 h-6 text-yellow-600 mt-1" />
               <div>
-                <h3 className="text-lg font-semibold text-yellow-800">Attention Required</h3>
+                <h3 className="text-lg font-semibold text-yellow-800">System Alert</h3>
                 <p className="text-yellow-700 mt-1">
-                  {cseKStats.high_risk_count > cseDStats.high_risk_count ? 'CSE-K' : 'CSE-D'} class has {Math.max(cseKStats.high_risk_count, cseDStats.high_risk_count)} high-risk students. Consider scheduling wellness check-ins.
+                  {overallStats.totalHighRisk} students are currently at high risk. Consider implementing campus-wide wellness initiatives.
                 </p>
-                <Button size="sm" className="mt-3 bg-yellow-600 hover:bg-yellow-700" onClick={() => onPageChange('students')}>
-                  View Details
+                <Button size="sm" className="mt-3 bg-yellow-600 hover:bg-yellow-700" onClick={() => onPageChange('analytics')}>
+                  View Analytics
                 </Button>
               </div>
             </div>
@@ -348,4 +390,4 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ onPageChange }) => {
   );
 };
 
-export default StaffDashboard;
+export default AdminDashboard;

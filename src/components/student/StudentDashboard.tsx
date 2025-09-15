@@ -1,12 +1,61 @@
 import React from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useStudentData } from '@/hooks/useStudentData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, TrendingDown, Calendar, CheckCircle, AlertCircle, Smile } from 'lucide-react';
-import { studentData } from '@/data/mockData';
 
 const StudentDashboard: React.FC = () => {
-  const { briScore, attendance, avgMarks, assignmentsOnTime, sentiment, briHistory, attendanceData } = studentData;
+  const { profile } = useAuth();
+  const { studentData, attendanceRecords, loading } = useStudentData(profile);
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!studentData) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-gray-600">Unable to load student data</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Convert BRI from 0-1 scale to 0-100 scale for display
+  const briScore = Math.round((studentData.current_bri || 0) * 100);
+  const attendance = Math.round(studentData.overall_attendance_percentage || 0);
+  const avgMarks = Math.round(studentData.average_marks || 0);
+  const assignmentsOnTime = Math.round(studentData.assignments_on_time_percentage || 0);
+  
+  // Generate BRI history from recent data (mock for now, will be replaced with actual snapshots)
+  const briHistory = [
+    { month: 'Jan', score: Math.max(0, briScore - 15 + Math.random() * 10) },
+    { month: 'Feb', score: Math.max(0, briScore - 10 + Math.random() * 10) },
+    { month: 'Mar', score: Math.max(0, briScore - 5 + Math.random() * 10) },
+    { month: 'Apr', score: Math.max(0, briScore - 8 + Math.random() * 10) },
+    { month: 'May', score: Math.max(0, briScore - 3 + Math.random() * 10) },
+    { month: 'Jun', score: briScore }
+  ];
+
+  // Calculate attendance data from records
+  const presentDays = attendanceRecords.filter(r => r.is_present).length;
+  const absentDays = attendanceRecords.length - presentDays;
+  const attendanceData = [
+    { name: 'Present', value: presentDays, fill: '#22c55e' },
+    { name: 'Absent', value: absentDays, fill: '#ef4444' }
+  ];
+
+  // Determine sentiment based on BRI score
+  const sentiment = briScore >= 70 ? 'positive' : briScore >= 50 ? 'neutral' : 'negative';
   const getBriColor = (score: number) => {
     if (score >= 70) return 'text-green-600';
     if (score >= 50) return 'text-yellow-600';

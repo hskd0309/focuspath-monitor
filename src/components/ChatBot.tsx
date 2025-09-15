@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,6 +14,7 @@ interface Message {
 }
 
 const ChatBot: React.FC = () => {
+  const { profile } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -22,8 +25,9 @@ const ChatBot: React.FC = () => {
     }
   ]);
   const [inputValue, setInputValue] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputValue.trim()) return;
 
     const userMessage: Message = {
@@ -34,6 +38,29 @@ const ChatBot: React.FC = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    setIsTyping(true);
+    
+    try {
+      // Store conversation in database
+      if (profile) {
+        // Analyze sentiment
+        const { data: sentimentData } = await supabase.functions.invoke('ml-sentiment-analysis', {
+          body: { text: inputValue, type: 'chatbot' }
+        });
+
+        // Store conversation
+        await supabase
+          .from('chatbot_conversations')
+          .insert({
+            user_id: profile.user_id,
+            message: inputValue,
+            sentiment_score: sentimentData?.sentiment_score,
+            sentiment_label: sentimentData?.sentiment_label
+          });
+      }
+    } catch (error) {
+      console.error('Error storing conversation:', error);
+    }
 
     // Simulate bot response
     setTimeout(() => {
@@ -44,6 +71,7 @@ const ChatBot: React.FC = () => {
         timestamp: new Date()
       };
       setMessages(prev => [...prev, botResponse]);
+      setIsTyping(false);
     }, 1000);
 
     setInputValue('');
@@ -53,16 +81,28 @@ const ChatBot: React.FC = () => {
     const lowerInput = input.toLowerCase();
     
     if (lowerInput.includes('bri') || lowerInput.includes('burnout')) {
-      return 'Your current BRI score indicates you\'re doing well. Remember to maintain a healthy work-life balance and reach out if you need support.';
+      return profile?.role === 'student' 
+        ? 'I can help you understand your BRI score. It measures your burnout risk based on attendance, academic performance, and sentiment. Would you like tips for managing stress?'
+        : 'BRI (Burnout Risk Index) is calculated using attendance, academic performance, assignment completion, and sentiment analysis. How can I help you interpret the data?';
     }
     if (lowerInput.includes('attendance')) {
-      return 'Your attendance is currently at 85%. Keep up the good work! Remember that 75% is the minimum requirement.';
+      return profile?.role === 'student'
+        ? 'Attendance is a key factor in your academic success and BRI calculation. Maintaining good attendance helps reduce burnout risk. Need tips for better attendance?'
+        : 'Attendance data is updated in real-time and contributes 25% to the BRI calculation by default. Low attendance often correlates with higher burnout risk.';
     }
     if (lowerInput.includes('assignment')) {
-      return 'You have 2 pending assignments. Check your assignments page for details and due dates.';
+      return 'Assignment completion rates affect your BRI score. Timely submissions indicate good time management and lower stress levels. Check your assignments page for current status.';
     }
     if (lowerInput.includes('help') || lowerInput.includes('support')) {
-      return 'I can help you with information about your BRI score, attendance, assignments, and campus resources. What would you like to know?';
+      return profile?.role === 'student'
+        ? 'I can help with BRI scores, attendance tracking, assignment management, and campus resources. I can also connect you with counselling services if needed.'
+        : 'I can assist with system navigation, data interpretation, student analytics, and administrative functions. What specific area would you like help with?';
+    }
+    if (lowerInput.includes('counsellor') || lowerInput.includes('counseling')) {
+      return 'Our counselling services are available for students who need support. Staff can create referrals through the student monitoring system. Would you like information about available resources?';
+    }
+    if (lowerInput.includes('stress') || lowerInput.includes('overwhelmed')) {
+      return 'It sounds like you might be experiencing stress. This is completely normal! Consider talking to a counsellor, practicing time management, or reaching out to friends. Your wellbeing is important.';
     }
     
     return 'I understand you\'re asking about "' + input + '". Could you please be more specific? I can help with BRI scores, attendance, assignments, and general campus information.';
@@ -116,6 +156,17 @@ const ChatBot: React.FC = () => {
                   </div>
                 </div>
               ))}
+              {isTyping && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 text-gray-800 rounded-lg rounded-bl-sm p-3 text-sm">
+                    <div className="flex space-x-1">
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                      <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Input */}
@@ -126,8 +177,9 @@ const ChatBot: React.FC = () => {
                 placeholder="Type your message..."
                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                 className="flex-1"
+                disabled={isTyping}
               />
-              <Button onClick={handleSendMessage} size="sm" className="px-3">
+              <Button onClick={handleSendMessage} size="sm" className="px-3" disabled={isTyping}>
                 <Send className="w-4 h-4" />
               </Button>
             </div>

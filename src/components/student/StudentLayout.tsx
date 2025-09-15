@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
 import ChatBot from '@/components/ChatBot';
 import StudentDashboard from './StudentDashboard';
@@ -10,6 +11,7 @@ import StudentFeedback from './StudentFeedback';
 import StudentProfile from './StudentProfile';
 
 const StudentLayout: React.FC = () => {
+  const { profile } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
 
   const renderPage = () => {
@@ -37,7 +39,7 @@ const StudentLayout: React.FC = () => {
     <div className="min-h-screen bg-dashboard-bg">
       <Navigation
         userType="student"
-        userName="STU001"
+        userName={profile?.roll_no || "STU001"}
         currentPage={currentPage}
         onPageChange={setCurrentPage}
       />

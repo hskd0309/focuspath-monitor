@@ -1,28 +1,44 @@
 import React from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useStudentData } from '@/hooks/useStudentData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar, Clock, CheckCircle, AlertTriangle, FileText } from 'lucide-react';
-import { studentData } from '@/data/mockData';
 
 const StudentAssignments: React.FC = () => {
-  const { assignments } = studentData;
+  const { profile } = useAuth();
+  const { assignments, loading } = useStudentData(profile);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   const getStatusBadge = (assignment: any) => {
-    if (assignment.status === 'completed') {
+    const hasSubmission = assignment.assignment_submissions && assignment.assignment_submissions.length > 0;
+    const isOverdue = new Date(assignment.due_date) < new Date() && !hasSubmission;
+    
+    if (hasSubmission) {
       return <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Completed</Badge>;
     }
-    if (assignment.isOverdue) {
+    if (isOverdue) {
       return <Badge className="bg-red-100 text-red-800 hover:bg-red-100">Overdue</Badge>;
     }
     return <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">Pending</Badge>;
   };
 
   const getStatusIcon = (assignment: any) => {
-    if (assignment.status === 'completed') {
+    const hasSubmission = assignment.assignment_submissions && assignment.assignment_submissions.length > 0;
+    const isOverdue = new Date(assignment.due_date) < new Date() && !hasSubmission;
+    
+    if (hasSubmission) {
       return <CheckCircle className="w-5 h-5 text-green-600" />;
     }
-    if (assignment.isOverdue) {
+    if (isOverdue) {
       return <AlertTriangle className="w-5 h-5 text-red-600" />;
     }
     return <Clock className="w-5 h-5 text-yellow-600" />;
@@ -40,8 +56,12 @@ const StudentAssignments: React.FC = () => {
     return `Due in ${diffDays} days`;
   };
 
-  const upcomingAssignments = assignments.filter(a => a.status !== 'completed');
-  const completedAssignments = assignments.filter(a => a.status === 'completed');
+  const upcomingAssignments = assignments.filter(a => 
+    !a.assignment_submissions || a.assignment_submissions.length === 0
+  );
+  const completedAssignments = assignments.filter(a => 
+    a.assignment_submissions && a.assignment_submissions.length > 0
+  );
 
   return (
     <div className="space-y-8 animate-fade-in">

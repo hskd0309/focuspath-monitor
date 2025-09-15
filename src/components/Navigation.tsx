@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { 
@@ -18,8 +18,7 @@ interface NavigationProps {
 }
 
 const Navigation: React.FC<NavigationProps> = ({ userType, userName, currentPage, onPageChange }) => {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const { signOut, profile } = useAuth();
 
   const getMenuItems = () => {
     switch (userType) {
@@ -62,11 +61,13 @@ const Navigation: React.FC<NavigationProps> = ({ userType, userName, currentPage
     }
   };
 
-  const handleLogout = () => {
-    navigate('/');
+  const handleLogout = async () => {
+    await signOut();
+    window.location.href = '/';
   };
 
   const menuItems = getMenuItems();
+  const displayName = profile?.full_name || userName;
 
   return (
     <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
@@ -96,7 +97,7 @@ const Navigation: React.FC<NavigationProps> = ({ userType, userName, currentPage
           {/* User Menu */}
           <div className="flex items-center space-x-4">
             <span className="hidden sm:block text-sm text-gray-700">
-              Welcome, <span className="font-medium">{userName}</span>
+              Welcome, <span className="font-medium">{displayName}</span>
             </span>
             
             <DropdownMenu>
@@ -104,7 +105,7 @@ const Navigation: React.FC<NavigationProps> = ({ userType, userName, currentPage
                 <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                   <Avatar className="h-8 w-8">
                     <AvatarFallback className="bg-blue-600 text-white">
-                      {userName.charAt(0).toUpperCase()}
+                      {displayName.charAt(0).toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                 </Button>

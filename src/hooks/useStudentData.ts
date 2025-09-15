@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { Profile } from '@/contexts/AuthContext';
 
 export interface StudentData {
   id: string;
@@ -8,6 +8,10 @@ export interface StudentData {
   overall_attendance_percentage: number;
   average_marks: number;
   assignments_on_time_percentage: number;
+  profiles?: {
+    class: string;
+    full_name: string;
+  };
 }
 
 export interface AttendanceRecord {
@@ -44,8 +48,7 @@ export interface Assignment {
   }[];
 }
 
-export function useStudentData() {
-  const { profile } = useAuth();
+export function useStudentData(profile: Profile | null) {
   const [studentData, setStudentData] = useState<StudentData | null>(null);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [testResults, setTestResults] = useState<TestResult[]>([]);
@@ -62,11 +65,14 @@ export function useStudentData() {
     try {
       setLoading(true);
 
-      // Get student record
+      // Get student record by roll number
       const { data: student, error: studentError } = await supabase
         .from('students')
-        .select('*')
-        .eq('profile_id', profile?.id)
+        .select(`
+          *,
+          profiles!inner(class, full_name)
+        `)
+        .eq('profiles.roll_no', profile?.roll_no)
         .single();
 
       if (studentError) throw studentError;
@@ -105,15 +111,15 @@ export function useStudentData() {
       if (testsError) throw testsError;
       setTestResults(tests || []);
 
-      // Get assignments for student's class
+      // Get assignments and submissions for student's class
       const { data: assignmentList, error: assignmentsError } = await supabase
         .from('assignments')
         .select(`
           *,
           subjects!inner(name, code),
-          assignment_submissions!left(submitted_at, is_on_time)
+          assignment_submissions(submitted_at, is_on_time)
         `)
-        .eq('class', profile?.class)
+        .eq('class', student.profiles.class)
         .order('due_date', { ascending: false })
         .limit(30);
 

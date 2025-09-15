@@ -1,37 +1,59 @@
 import React from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useStudentData } from '@/hooks/useStudentData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { Calendar, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 const StudentAttendance: React.FC = () => {
+  const { profile } = useAuth();
+  const { attendanceRecords, loading } = useStudentData(profile);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Calculate attendance statistics
+  const presentDays = attendanceRecords.filter(r => r.is_present).length;
+  const absentDays = attendanceRecords.length - presentDays;
   const attendanceStats = {
-    totalDays: 120,
-    presentDays: 102,
-    absentDays: 18,
-    percentage: 85
+    totalDays: attendanceRecords.length,
+    presentDays,
+    absentDays,
+    percentage: attendanceRecords.length > 0 ? Math.round((presentDays / attendanceRecords.length) * 100) : 0
   };
 
-  const monthlyAttendance = [
-    { month: 'Jan', present: 20, absent: 2 },
-    { month: 'Feb', present: 18, absent: 4 },
-    { month: 'Mar', present: 21, absent: 1 },
-    { month: 'Apr', present: 19, absent: 3 },
-    { month: 'May', present: 22, absent: 0 },
-    { month: 'Jun', present: 20, absent: 2 }
-  ];
+  // Group attendance by month
+  const monthlyAttendance = attendanceRecords.reduce((acc, record) => {
+    const month = new Date(record.date).toLocaleDateString('en-US', { month: 'short' });
+    if (!acc[month]) {
+      acc[month] = { month, present: 0, absent: 0 };
+    }
+    if (record.is_present) {
+      acc[month].present++;
+    } else {
+      acc[month].absent++;
+    }
+    return acc;
+  }, {} as Record<string, { month: string; present: number; absent: number }>);
 
   const attendanceData = [
     { name: 'Present', value: attendanceStats.presentDays, fill: '#22c55e' },
     { name: 'Absent', value: attendanceStats.absentDays, fill: '#ef4444' }
   ];
 
-  const recentAttendance = [
-    { date: '2024-09-09', status: 'present', subject: 'Mathematics' },
-    { date: '2024-09-08', status: 'present', subject: 'Physics' },
-    { date: '2024-09-07', status: 'absent', subject: 'Chemistry' },
-    { date: '2024-09-06', status: 'present', subject: 'English' },
-    { date: '2024-09-05', status: 'present', subject: 'Computer Science' }
-  ];
+  // Get recent attendance records
+  const recentAttendance = attendanceRecords
+    .slice(0, 10)
+    .map(record => ({
+      date: record.date,
+      status: record.is_present ? 'present' : 'absent',
+      subject: 'General' // In a real system, this would be linked to specific subjects
+    }));
 
   const getStatusIcon = (status: string) => {
     return status === 'present' ? 
@@ -111,7 +133,7 @@ const StudentAttendance: React.FC = () => {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={monthlyAttendance}>
+              <BarChart data={Object.values(monthlyAttendance)}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="month" stroke="#6b7280" />
                 <YAxis stroke="#6b7280" />

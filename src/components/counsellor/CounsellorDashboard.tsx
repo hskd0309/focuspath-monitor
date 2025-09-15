@@ -1,14 +1,26 @@
 import React from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCounsellorData } from '@/hooks/useCounsellorData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
 import { Users, AlertTriangle, Calendar, TrendingUp, Heart, Clock } from 'lucide-react';
-import { counsellorReferrals } from '@/data/mockData';
 
 const CounsellorDashboard: React.FC = () => {
-  const activeReferrals = counsellorReferrals.filter(r => r.status === 'active');
-  const totalSessions = 24;
-  const completedSessions = 18;
+  const { profile } = useAuth();
+  const { referrals, loading } = useCounsellorData(profile);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  const activeReferrals = referrals.filter(r => r.status === 'Open' || r.status === 'In Progress');
+  const totalSessions = referrals.length * 2; // Assume 2 sessions per referral on average
+  const completedSessions = referrals.filter(r => r.status === 'Closed').length * 2;
 
   const weeklySessionData = [
     { week: 'Week 1', sessions: 6, newReferrals: 2 },
@@ -17,11 +29,12 @@ const CounsellorDashboard: React.FC = () => {
     { week: 'Week 4', sessions: 7, newReferrals: 2 }
   ];
 
+  // Calculate risk distribution from referrals
   const riskLevelData = [
-    { name: 'Critical Risk', value: 3, fill: '#ef4444' },
-    { name: 'High Risk', value: 8, fill: '#f59e0b' },
-    { name: 'Moderate Risk', value: 15, fill: '#3b82f6' },
-    { name: 'Improving', value: 6, fill: '#22c55e' }
+    { name: 'Critical Risk', value: referrals.filter(r => r.bri_score <= 0.2).length, fill: '#ef4444' },
+    { name: 'High Risk', value: referrals.filter(r => r.bri_score > 0.2 && r.bri_score <= 0.4).length, fill: '#f59e0b' },
+    { name: 'Moderate Risk', value: referrals.filter(r => r.bri_score > 0.4 && r.bri_score <= 0.6).length, fill: '#3b82f6' },
+    { name: 'Improving', value: referrals.filter(r => r.bri_score > 0.6).length, fill: '#22c55e' }
   ];
 
   const sessionOutcomes = [
@@ -72,7 +85,9 @@ const CounsellorDashboard: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Success Rate</p>
-                <p className="text-3xl font-bold text-green-600">85%</p>
+                <p className="text-3xl font-bold text-green-600">
+                  {referrals.length > 0 ? Math.round((referrals.filter(r => r.status === 'Closed').length / referrals.length) * 100) : 0}%
+                </p>
                 <p className="text-xs text-gray-500 mt-1">Positive outcomes</p>
               </div>
               <TrendingUp className="w-8 h-8 text-green-600" />
@@ -84,9 +99,9 @@ const CounsellorDashboard: React.FC = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Avg Session Length</p>
-                <p className="text-3xl font-bold text-purple-600">45m</p>
-                <p className="text-xs text-gray-500 mt-1">Per session</p>
+                <p className="text-sm font-medium text-gray-600">Students Helped</p>
+                <p className="text-3xl font-bold text-purple-600">{referrals.length}</p>
+                <p className="text-xs text-gray-500 mt-1">Unique students</p>
               </div>
               <Clock className="w-8 h-8 text-purple-600" />
             </div>
@@ -159,7 +174,7 @@ const CounsellorDashboard: React.FC = () => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {counsellorReferrals.slice(0, 3).map((referral) => (
+            {referrals.slice(0, 3).map((referral) => (
               <div key={referral.id} className="p-4 bg-gray-50 rounded-lg border">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center space-x-3">
@@ -167,25 +182,23 @@ const CounsellorDashboard: React.FC = () => {
                       <Heart className="w-5 h-5 text-red-600" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-gray-800">{referral.realName}</h3>
-                      <p className="text-sm text-gray-600">BRI Score: {referral.briScore}</p>
+                      <h3 className="font-semibold text-gray-800">{referral.student_name}</h3>
+                      <p className="text-sm text-gray-600">BRI Score: {Math.round(referral.bri_score * 100)}</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <Badge variant={referral.status === 'active' ? 'destructive' : 'secondary'}>
                       {referral.status}
                     </Badge>
-                    <p className="text-xs text-gray-500 mt-1">{referral.referredDate}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {new Date(referral.created_at).toLocaleDateString()}
+                    </p>
                   </div>
                 </div>
-                <p className="text-sm text-gray-700 mb-2">{referral.notes}</p>
-                <div className="flex flex-wrap gap-1">
-                  {referral.riskFactors.map((factor, index) => (
-                    <Badge key={index} variant="outline" className="text-xs">
-                      {factor}
-                    </Badge>
-                  ))}
-                </div>
+                <p className="text-sm text-gray-700 mb-2">{referral.reason}</p>
+                {referral.notes && (
+                  <p className="text-sm text-gray-600 italic">Notes: {referral.notes}</p>
+                )}
               </div>
             ))}
           </div>

@@ -1,29 +1,58 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useStaffData } from '@/hooks/useStaffData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { Users, AlertTriangle, TrendingDown, MessageSquare, Eye, UserX, Phone, Mail } from 'lucide-react';
-import { classData, complaints } from '@/data/mockData';
+import { useToast } from '@/hooks/use-toast';
 
 interface ClassAnalyticsProps {
   className: 'CSE-K' | 'CSE-D';
 }
 
 const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
+  const { profile } = useAuth();
+  const { cseKStudents, cseDStudents, cseKStats, cseDStats, complaints, loading, createReferral } = useStaffData(profile);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
-  const classInfo = classData[className];
+  const { toast } = useToast();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  const students = className === 'CSE-K' ? cseKStudents : cseDStudents;
+  const classStats = className === 'CSE-K' ? cseKStats : cseDStats;
+
+  if (!classStats) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <p className="text-gray-600">Unable to load class data</p>
+        </div>
+      </div>
+    );
+  }
 
   // Sample sparkline data generator
-  const generateSparklineData = (trend: number[]) => {
-    return trend.map((value, index) => ({ x: index, y: value }));
+  const generateSparklineData = (briScore: number) => {
+    // Generate trend data based on current BRI score
+    return Array.from({ length: 10 }, (_, i) => ({
+      x: i,
+      y: Math.max(0, Math.min(100, (briScore * 100) + (Math.random() - 0.5) * 20))
+    }));
   };
 
   const getStudentRiskColor = (riskLevel: string) => {
     switch (riskLevel) {
-      case 'high': return 'bg-red-100 border-red-300 text-red-800';
-      case 'medium': return 'bg-yellow-100 border-yellow-300 text-yellow-800';
+      case 'High': return 'bg-red-100 border-red-300 text-red-800';
+      case 'At Risk': return 'bg-yellow-100 border-yellow-300 text-yellow-800';
       default: return 'bg-green-100 border-green-300 text-green-800';
     }
   };
@@ -36,6 +65,30 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
 
   const recentComplaints = complaints.filter(complaint => complaint.class === className);
 
+  const handleNotifyCounsellor = async (student: any) => {
+    try {
+      const result = await createReferral(
+        student.id,
+        `High BRI score (${Math.round(student.current_bri * 100)}) - requires counselling support`
+      );
+      
+      if (result.success) {
+        toast({
+          title: "Referral Created",
+          description: "Student has been referred to counsellor successfully"
+        });
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create referral. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const StudentModal: React.FC<{ student: any }> = ({ student }) => (
     <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
       <DialogHeader>
@@ -46,19 +99,23 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card className="p-4">
             <div className="text-center">
-              <p className={`text-3xl font-bold ${getBriColor(student.briScore)}`}>{student.briScore}</p>
+              <p className={`text-3xl font-bold ${getBriColor(Math.round(student.current_bri * 100))}`}>
+                {Math.round(student.current_bri * 100)}
+              </p>
               <p className="text-sm text-gray-600">Current BRI</p>
             </div>
           </Card>
           <Card className="p-4">
             <div className="text-center">
-              <p className="text-3xl font-bold text-blue-600">{student.riskLevel}</p>
+              <p className="text-3xl font-bold text-blue-600">{student.risk_level}</p>
               <p className="text-sm text-gray-600">Risk Level</p>
             </div>
           </Card>
           <Card className="p-4">
             <div className="text-center">
-              <p className="text-3xl font-bold text-green-600">85%</p>
+              <p className="text-3xl font-bold text-green-600">
+                {Math.round(student.overall_attendance_percentage)}%
+              </p>
               <p className="text-sm text-gray-600">Attendance</p>
             </div>
           </Card>
@@ -71,7 +128,7 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={generateSparklineData(student.trend)}>
+              <LineChart data={generateSparklineData(student.current_bri)}>
                 <XAxis dataKey="x" hide />
                 <YAxis hide />
                 <Line 
@@ -105,7 +162,7 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
 
         {/* Actions */}
         <div className="flex space-x-3">
-          <Button className="flex-1">
+          <Button className="flex-1" onClick={() => handleNotifyCounsellor(student)}>
             <Phone className="w-4 h-4 mr-2" />
             Notify Counsellor
           </Button>
@@ -137,7 +194,9 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Class BRI</p>
-                <p className={`text-3xl font-bold ${getBriColor(classInfo.avgBri)}`}>{classInfo.avgBri}</p>
+                <p className={`text-3xl font-bold ${getBriColor(Math.round(classStats.avg_bri * 100))}`}>
+                  {Math.round(classStats.avg_bri * 100)}
+                </p>
                 <p className="text-xs text-gray-500 mt-1">Average score</p>
               </div>
               <TrendingDown className="w-8 h-8 text-yellow-600" />
@@ -150,7 +209,7 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">High Risk</p>
-                <p className="text-3xl font-bold text-red-600">{classInfo.highRiskCount}</p>
+                <p className="text-3xl font-bold text-red-600">{classStats.high_risk_count}</p>
                 <p className="text-xs text-gray-500 mt-1">Students</p>
               </div>
               <AlertTriangle className="w-8 h-8 text-red-600" />
@@ -163,7 +222,7 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Attendance</p>
-                <p className="text-3xl font-bold text-green-600">{classInfo.avgAttendance}%</p>
+                <p className="text-3xl font-bold text-green-600">{classStats.avg_attendance}%</p>
                 <p className="text-xs text-gray-500 mt-1">Class average</p>
               </div>
               <Users className="w-8 h-8 text-green-600" />
@@ -176,7 +235,7 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Complaints</p>
-                <p className="text-3xl font-bold text-blue-600">{classInfo.complaintsCount}</p>
+                <p className="text-3xl font-bold text-blue-600">{classStats.complaint_count}</p>
                 <p className="text-xs text-gray-500 mt-1">This week</p>
               </div>
               <MessageSquare className="w-8 h-8 text-blue-600" />
@@ -193,8 +252,16 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
             <CardTitle>Class BRI Trend</CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Generate trend data from current stats */}
+            {(() => {
+              const trendData = Array.from({ length: 5 }, (_, i) => ({
+                week: `Week ${i + 1}`,
+                score: Math.max(0, Math.round(classStats.avg_bri * 100) - (4 - i) * 3 + Math.random() * 6)
+              }));
+              
+              return (
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={classInfo.briTrend}>
+                <LineChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="week" stroke="#6b7280" />
                 <YAxis stroke="#6b7280" />
@@ -207,6 +274,8 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
                 />
               </LineChart>
             </ResponsiveContainer>
+              );
+            })()}
           </CardContent>
         </Card>
 
@@ -216,10 +285,19 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
             <CardTitle>Risk Distribution</CardTitle>
           </CardHeader>
           <CardContent>
+            {(() => {
+              const riskData = [
+                { risk: 'Low', count: students.filter(s => s.risk_level === 'Low').length, fill: '#22c55e' },
+                { risk: 'At Risk', count: students.filter(s => s.risk_level === 'At Risk').length, fill: '#f59e0b' },
+                { risk: 'High', count: students.filter(s => s.risk_level === 'High').length, fill: '#ef4444' }
+              ];
+              
+              return (
+                <>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={classInfo.riskDistribution}
+                    data={riskData}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -227,20 +305,23 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
                   paddingAngle={5}
                   dataKey="count"
                 >
-                  {classInfo.riskDistribution.map((entry, index) => (
+                    {riskData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
             <div className="flex justify-center mt-4 space-x-6">
-              {classInfo.riskDistribution.map((entry, index) => (
+                {riskData.map((entry, index) => (
                 <div key={index} className="flex items-center space-x-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.fill }}></div>
                   <span className="text-sm text-gray-600">{entry.risk}: {entry.count}</span>
                 </div>
               ))}
             </div>
+                </>
+              );
+            })()}
           </CardContent>
         </Card>
       </div>
@@ -255,20 +336,20 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-            {classInfo.students.map((student) => (
+            {students.map((student) => (
               <Dialog key={student.id}>
                 <DialogTrigger asChild>
-                  <Card className={`cursor-pointer transition-all hover:shadow-md ${getStudentRiskColor(student.riskLevel)}`}>
+                  <Card className={`cursor-pointer transition-all hover:shadow-md ${getStudentRiskColor(student.risk_level)}`}>
                     <CardContent className="p-4">
                       <div className="text-center mb-3">
-                        <p className="font-semibold text-sm">{student.id}</p>
-                        <p className={`text-2xl font-bold ${getBriColor(student.briScore)}`}>
-                          {student.briScore}
+                        <p className="font-semibold text-sm">{student.anonymized_id}</p>
+                        <p className={`text-2xl font-bold ${getBriColor(Math.round(student.current_bri * 100))}`}>
+                          {Math.round(student.current_bri * 100)}
                         </p>
                       </div>
                       <div className="h-12">
                         <ResponsiveContainer width="100%" height="100%">
-                          <LineChart data={generateSparklineData(student.trend)}>
+                          <LineChart data={generateSparklineData(student.current_bri)}>
                             <Line 
                               type="monotone" 
                               dataKey="y" 
@@ -280,7 +361,7 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
                         </ResponsiveContainer>
                       </div>
                       <Badge variant="outline" className="w-full text-xs mt-2 justify-center">
-                        {student.riskLevel} risk
+                        {student.risk_level} risk
                       </Badge>
                     </CardContent>
                   </Card>
@@ -294,19 +375,21 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
 
       {/* Complaint Feed */}
       <Card className="dashboard-card">
-        <CardHeader>
+              {recentComplaints.slice(0, 5).map((complaint) => (
           <CardTitle className="flex items-center gap-2">
             <MessageSquare className="w-5 h-5" />
             Recent Anonymous Complaints
-          </CardTitle>
-        </CardHeader>
+                      <p className="text-gray-800">{complaint.content}</p>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {new Date(complaint.created_at).toLocaleString()}
+                      </p>
         <CardContent>
           <div className="space-y-4">
-            {recentComplaints.map((complaint) => (
-              <div key={complaint.id} className="p-4 bg-gray-50 rounded-lg border-l-4 border-blue-400">
+                      complaint.sentiment_label === 'Positive' ? 'bg-green-100 text-green-800' :
+                      complaint.sentiment_label === 'Negative' ? 'bg-red-100 text-red-800' :
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="text-gray-800">{complaint.text}</p>
+                      {complaint.sentiment_label || 'Neutral'}
                     <p className="text-xs text-gray-500 mt-2">{complaint.timestamp}</p>
                   </div>
                   <Badge className={`ml-4 ${
@@ -331,7 +414,7 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
             <div className="space-y-2">
               <h4 className="font-medium text-blue-700">Immediate Actions</h4>
               <ul className="text-sm text-blue-600 space-y-1">
-                <li>• Schedule wellness check-ins for high-risk students</li>
+                <li>• Schedule wellness check-ins for {classStats.high_risk_count} high-risk students</li>
                 <li>• Review course workload distribution</li>
                 <li>• Send counsellor referrals for flagged students</li>
               </ul>
@@ -341,7 +424,7 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
               <ul className="text-sm text-blue-600 space-y-1">
                 <li>• Organize stress management workshops</li>
                 <li>• Implement peer support programs</li>
-                <li>• Adjust assignment deadlines if possible</li>
+                <li>• Monitor attendance trends (current: {classStats.avg_attendance}%)</li>
               </ul>
             </div>
           </div>

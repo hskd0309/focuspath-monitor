@@ -1,22 +1,46 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useStudentData } from '@/hooks/useStudentData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { BookOpen, Calendar, Clock, TrendingUp, Target } from 'lucide-react';
-import { studentData } from '@/data/mockData';
 
 const StudentTests: React.FC = () => {
+  const { profile } = useAuth();
+  const { testResults, loading } = useStudentData(profile);
   const [activeTab, setActiveTab] = useState('marks');
 
-  const testMarks = [
-    { subject: 'Mathematics', midterm: 85, final: 88, average: 86.5 },
-    { subject: 'Physics', midterm: 78, final: 82, average: 80 },
-    { subject: 'Chemistry', midterm: 82, final: 85, average: 83.5 },
-    { subject: 'English', midterm: 75, final: 78, average: 76.5 },
-    { subject: 'Computer Science', midterm: 90, final: 92, average: 91 }
-  ];
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Process test results by subject
+  const testMarksBySubject = testResults.reduce((acc, test) => {
+    const subjectName = test.tests.subjects.name;
+    if (!acc[subjectName]) {
+      acc[subjectName] = [];
+    }
+    const percentage = Math.round((test.marks_obtained / test.tests.max_marks) * 100);
+    acc[subjectName].push(percentage);
+    return acc;
+  }, {} as Record<string, number[]>);
+
+  const testMarks = Object.entries(testMarksBySubject).map(([subject, marks]) => {
+    const average = marks.reduce((sum, mark) => sum + mark, 0) / marks.length;
+    return {
+      subject,
+      midterm: marks[0] || 0,
+      final: marks[1] || marks[0] || 0,
+      average: Math.round(average)
+    };
+  });
 
   const upcomingTests = [
     {
@@ -48,11 +72,13 @@ const StudentTests: React.FC = () => {
     }
   ];
 
-  const chartData = testMarks.map(subject => ({
-    subject: subject.subject.substring(0, 8),
-    midterm: subject.midterm,
-    final: subject.final
-  }));
+  const chartData = testMarks.length > 0 
+    ? testMarks.map(subject => ({
+        subject: subject.subject.substring(0, 8),
+        midterm: subject.midterm,
+        final: subject.final
+      }))
+    : [{ subject: 'No Data', midterm: 0, final: 0 }];
 
   const getGradeColor = (score: number) => {
     if (score >= 90) return 'text-green-600';
@@ -79,7 +105,9 @@ const StudentTests: React.FC = () => {
     return `In ${diffDays} days`;
   };
 
-  const averageScore = testMarks.reduce((acc, subject) => acc + subject.average, 0) / testMarks.length;
+  const averageScore = testMarks.length > 0 
+    ? testMarks.reduce((acc, subject) => acc + subject.average, 0) / testMarks.length 
+    : 0;
 
   return (
     <div className="space-y-8 animate-fade-in">

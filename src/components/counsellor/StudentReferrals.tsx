@@ -1,16 +1,31 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCounsellorData } from '@/hooks/useCounsellorData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { User, AlertTriangle, FileText, Calendar } from 'lucide-react';
-import { counsellorReferrals } from '@/data/mockData';
+import { useToast } from '@/hooks/use-toast';
 
 const StudentReferrals: React.FC = () => {
+  const { profile } = useAuth();
+  const { referrals, loading, updateReferralStatus } = useCounsellorData(profile);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [notes, setNotes] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<'Open' | 'In Progress' | 'Closed'>('Open');
+  const { toast } = useToast();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   const mockStudentDetails = {
     briHistory: [
@@ -26,6 +41,26 @@ const StudentReferrals: React.FC = () => {
     assignments: 70
   };
 
+  const handleUpdateReferral = async (referralId: string) => {
+    try {
+      const result = await updateReferralStatus(referralId, selectedStatus, notes);
+      if (result.success) {
+        toast({
+          title: "Referral Updated",
+          description: "Referral status and notes updated successfully"
+        });
+        setNotes('');
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update referral. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
   return (
     <div className="space-y-8 animate-fade-in">
       <div className="text-center mb-8">
@@ -42,7 +77,7 @@ const StudentReferrals: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {counsellorReferrals.map((referral) => (
+                {referrals.map((referral) => (
                   <div key={referral.id} className="p-4 bg-gray-50 rounded-lg border">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center space-x-3">
@@ -50,27 +85,25 @@ const StudentReferrals: React.FC = () => {
                           <User className="w-5 h-5 text-blue-600" />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-gray-800">{referral.realName}</h3>
-                          <p className="text-sm text-gray-600">BRI Score: {referral.briScore}</p>
+                          <h3 className="font-semibold text-gray-800">{referral.student_name}</h3>
+                          <p className="text-sm text-gray-600">BRI Score: {Math.round(referral.bri_score * 100)}</p>
+                          <p className="text-xs text-gray-500">Referred by: {referral.referred_by_name}</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <Badge variant={referral.status === 'active' ? 'destructive' : 'secondary'}>
+                        <Badge variant={referral.status === 'Open' ? 'destructive' : 'secondary'}>
                           {referral.status}
                         </Badge>
-                        <p className="text-xs text-gray-500 mt-1">{referral.referredDate}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(referral.created_at).toLocaleDateString()}
+                        </p>
                       </div>
                     </div>
                     
-                    <p className="text-sm text-gray-700 mb-3">{referral.notes}</p>
-                    
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {referral.riskFactors.map((factor, index) => (
-                        <Badge key={index} variant="outline" className="text-xs">
-                          {factor}
-                        </Badge>
-                      ))}
-                    </div>
+                    <p className="text-sm text-gray-700 mb-3">{referral.reason}</p>
+                    {referral.notes && (
+                      <p className="text-sm text-gray-600 italic mb-3">Notes: {referral.notes}</p>
+                    )}
 
                     <div className="flex space-x-2">
                       <Dialog>
@@ -84,7 +117,7 @@ const StudentReferrals: React.FC = () => {
                         </DialogTrigger>
                         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                           <DialogHeader>
-                            <DialogTitle>{referral.realName} - Detailed Profile</DialogTitle>
+                            <DialogTitle>{referral.student_name} - Detailed Profile</DialogTitle>
                           </DialogHeader>
                           <div className="space-y-6">
                             {/* BRI Chart */}
@@ -108,23 +141,56 @@ const StudentReferrals: React.FC = () => {
                             <div className="grid grid-cols-3 gap-4">
                               <Card>
                                 <CardContent className="p-4 text-center">
-                                  <p className="text-2xl font-bold text-red-600">{mockStudentDetails.attendance}%</p>
+                                  <p className="text-2xl font-bold text-red-600">
+                                    {Math.round(referral.bri_score * 100)}
+                                  </p>
+                                  <p className="text-sm text-gray-600">BRI Score</p>
+                                </CardContent>
+                              </Card>
+                              <Card>
+                                <CardContent className="p-4 text-center">
+                                  <p className="text-2xl font-bold text-yellow-600">75%</p>
                                   <p className="text-sm text-gray-600">Attendance</p>
                                 </CardContent>
                               </Card>
                               <Card>
                                 <CardContent className="p-4 text-center">
-                                  <p className="text-2xl font-bold text-yellow-600">{mockStudentDetails.avgMarks}%</p>
+                                  <p className="text-2xl font-bold text-green-600">68%</p>
                                   <p className="text-sm text-gray-600">Avg Marks</p>
                                 </CardContent>
                               </Card>
-                              <Card>
-                                <CardContent className="p-4 text-center">
-                                  <p className="text-2xl font-bold text-orange-600">{mockStudentDetails.assignments}%</p>
-                                  <p className="text-sm text-gray-600">Assignments</p>
-                                </CardContent>
-                              </Card>
                             </div>
+                            
+                            {/* Update Status */}
+                            <Card>
+                              <CardHeader>
+                                <CardTitle>Update Referral</CardTitle>
+                              </CardHeader>
+                              <CardContent className="space-y-4">
+                                <Select value={selectedStatus} onValueChange={(value: any) => setSelectedStatus(value)}>
+                                  <SelectTrigger>
+                                    <SelectValue placeholder="Select status" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="Open">Open</SelectItem>
+                                    <SelectItem value="In Progress">In Progress</SelectItem>
+                                    <SelectItem value="Closed">Closed</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Textarea
+                                  value={notes}
+                                  onChange={(e) => setNotes(e.target.value)}
+                                  placeholder="Add session notes..."
+                                  className="min-h-24"
+                                />
+                                <Button 
+                                  onClick={() => handleUpdateReferral(referral.id)}
+                                  className="w-full"
+                                >
+                                  Update Referral
+                                </Button>
+                              </CardContent>
+                            </Card>
                           </div>
                         </DialogContent>
                       </Dialog>
@@ -174,7 +240,19 @@ const StudentReferrals: React.FC = () => {
                 placeholder="Add notes about the session..."
                 className="min-h-32"
               />
-              <Button className="w-full mt-3">Save Notes</Button>
+              <div className="flex space-x-2 mt-3">
+                <Select value={selectedStatus} onValueChange={(value: any) => setSelectedStatus(value)}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Open">Open</SelectItem>
+                    <SelectItem value="In Progress">In Progress</SelectItem>
+                    <SelectItem value="Closed">Closed</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button className="flex-1">Save Notes</Button>
+              </div>
             </CardContent>
           </Card>
         </div>

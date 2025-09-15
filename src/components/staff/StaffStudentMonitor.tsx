@@ -1,4 +1,6 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
+import { useStaffData } from '@/hooks/useStaffData';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -6,25 +8,33 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Search, Filter, Users, AlertTriangle, TrendingUp, Phone, Mail, Eye } from 'lucide-react';
-import { classData } from '@/data/mockData';
+import { useToast } from '@/hooks/use-toast';
 
 const StaffStudentMonitor: React.FC = () => {
+  const { profile } = useAuth();
+  const { cseKStudents, cseDStudents, loading, createReferral } = useStaffData(profile);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterClass, setFilterClass] = useState('all');
   const [filterRisk, setFilterRisk] = useState('all');
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const { toast } = useToast();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   // Combine students from both classes
-  const allStudents = [
-    ...classData['CSE-K'].students.map(s => ({ ...s, class: 'CSE-K' })),
-    ...classData['CSE-D'].students.map(s => ({ ...s, class: 'CSE-D' }))
-  ];
+  const allStudents = [...cseKStudents, ...cseDStudents];
 
   // Filter students based on search and filters
   const filteredStudents = allStudents.filter(student => {
-    const matchesSearch = student.id.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesClass = filterClass === 'all' || student.class === filterClass;
-    const matchesRisk = filterRisk === 'all' || student.riskLevel === filterRisk;
+    const matchesSearch = student.anonymized_id.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesClass = filterClass === 'all' || student.profiles?.class === filterClass;
+    const matchesRisk = filterRisk === 'all' || student.risk_level.toLowerCase() === filterRisk;
     return matchesSearch && matchesClass && matchesRisk;
   });
 
@@ -36,42 +46,68 @@ const StaffStudentMonitor: React.FC = () => {
 
   const getRiskBadgeColor = (riskLevel: string) => {
     switch (riskLevel) {
-      case 'high': return 'bg-red-100 text-red-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
+      case 'High': return 'bg-red-100 text-red-800';
+      case 'At Risk': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-green-100 text-green-800';
     }
   };
 
   const getGradientBackground = (riskLevel: string) => {
     switch (riskLevel) {
-      case 'high': return 'bg-gradient-to-r from-red-50 to-pink-50 border-red-200';
-      case 'medium': return 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200';
+      case 'High': return 'bg-gradient-to-r from-red-50 to-pink-50 border-red-200';
+      case 'At Risk': return 'bg-gradient-to-r from-yellow-50 to-orange-50 border-yellow-200';
       default: return 'bg-gradient-to-r from-green-50 to-emerald-50 border-green-200';
     }
   };
 
-  const highRiskStudents = filteredStudents.filter(s => s.riskLevel === 'high');
-  const mediumRiskStudents = filteredStudents.filter(s => s.riskLevel === 'medium');
-  const lowRiskStudents = filteredStudents.filter(s => s.riskLevel === 'low');
+  const highRiskStudents = filteredStudents.filter(s => s.risk_level === 'High');
+  const mediumRiskStudents = filteredStudents.filter(s => s.risk_level === 'At Risk');
+  const lowRiskStudents = filteredStudents.filter(s => s.risk_level === 'Low');
+
+  const handleNotifyCounsellor = async (student: any) => {
+    try {
+      const result = await createReferral(
+        student.id,
+        `High BRI score (${Math.round(student.current_bri * 100)}) - requires immediate counselling support`
+      );
+      
+      if (result.success) {
+        toast({
+          title: "Referral Created",
+          description: "Student has been referred to counsellor successfully"
+        });
+      } else {
+        throw new Error(result.error);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to create referral. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const StudentDetailModal: React.FC<{ student: any }> = ({ student }) => (
     <DialogContent className="max-w-2xl">
       <DialogHeader>
-        <DialogTitle>Student Details - {student.id}</DialogTitle>
+        <DialogTitle>Student Details - {student.anonymized_id}</DialogTitle>
       </DialogHeader>
       <div className="space-y-6">
         <div className="grid grid-cols-3 gap-4">
           <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className={`text-2xl font-bold ${getBriColor(student.briScore)}`}>{student.briScore}</p>
+            <p className={`text-2xl font-bold ${getBriColor(Math.round(student.current_bri * 100))}`}>
+              {Math.round(student.current_bri * 100)}
+            </p>
             <p className="text-sm text-gray-600">BRI Score</p>
           </div>
           <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <p className="text-2xl font-bold text-blue-600">{student.class}</p>
+            <p className="text-2xl font-bold text-blue-600">{student.profiles?.class}</p>
             <p className="text-sm text-gray-600">Class</p>
           </div>
           <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <Badge className={getRiskBadgeColor(student.riskLevel)}>
-              {student.riskLevel.toUpperCase()} RISK
+            <Badge className={getRiskBadgeColor(student.risk_level)}>
+              {student.risk_level.toUpperCase()} RISK
             </Badge>
             <p className="text-sm text-gray-600 mt-1">Risk Level</p>
           </div>
@@ -90,7 +126,7 @@ const StaffStudentMonitor: React.FC = () => {
         </div>
 
         <div className="flex space-x-3">
-          <Button className="flex-1">
+          <Button className="flex-1" onClick={() => handleNotifyCounsellor(student)}>
             <Phone className="w-4 h-4 mr-2" />
             Notify Counsellor
           </Button>
@@ -241,23 +277,30 @@ const StaffStudentMonitor: React.FC = () => {
                     <Card className="cursor-pointer hover:shadow-md transition-shadow bg-white border-red-200">
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between mb-3">
-                          <h3 className="font-semibold">{student.id}</h3>
+                          <h3 className="font-semibold">{student.anonymized_id}</h3>
                           <Badge className="bg-red-100 text-red-800 text-xs">HIGH RISK</Badge>
                         </div>
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div>
                             <span className="text-gray-600">BRI:</span>
-                            <span className={`ml-1 font-bold ${getBriColor(student.briScore)}`}>
-                              {student.briScore}
+                            <span className={`ml-1 font-bold ${getBriColor(Math.round(student.current_bri * 100))}`}>
+                              {Math.round(student.current_bri * 100)}
                             </span>
                           </div>
                           <div>
                             <span className="text-gray-600">Class:</span>
-                            <span className="ml-1 font-medium">{student.class}</span>
+                            <span className="ml-1 font-medium">{student.profiles?.class}</span>
                           </div>
                         </div>
                         <div className="mt-3 flex space-x-2">
-                          <Button size="sm" className="text-xs h-7 bg-red-600 hover:bg-red-700">
+                          <Button 
+                            size="sm" 
+                            className="text-xs h-7 bg-red-600 hover:bg-red-700"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleNotifyCounsellor(student);
+                            }}
+                          >
                             Alert Counsellor
                           </Button>
                         </div>
@@ -287,21 +330,21 @@ const StaffStudentMonitor: React.FC = () => {
                   <Card className={`cursor-pointer hover:shadow-md transition-shadow ${getGradientBackground(student.riskLevel)}`}>
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-semibold">{student.id}</h3>
-                        <Badge className={getRiskBadgeColor(student.riskLevel)}>
-                          {student.riskLevel}
+                        <h3 className="font-semibold">{student.anonymized_id}</h3>
+                        <Badge className={getRiskBadgeColor(student.risk_level)}>
+                          {student.risk_level}
                         </Badge>
                       </div>
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-600">BRI Score:</span>
-                          <span className={`font-bold ${getBriColor(student.briScore)}`}>
-                            {student.briScore}
+                          <span className={`font-bold ${getBriColor(Math.round(student.current_bri * 100))}`}>
+                            {Math.round(student.current_bri * 100)}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-gray-600">Class:</span>
-                          <span className="font-medium text-sm">{student.class}</span>
+                          <span className="font-medium text-sm">{student.profiles?.class}</span>
                         </div>
                       </div>
                       <div className="mt-3 pt-3 border-t border-gray-200">
@@ -331,7 +374,27 @@ const StaffStudentMonitor: React.FC = () => {
         <CardContent className="p-6">
           <h3 className="text-lg font-semibold text-blue-800 mb-4">📋 Bulk Actions</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Button className="h-16 flex flex-col items-center justify-center space-y-1">
+            <Button 
+              className="h-16 flex flex-col items-center justify-center space-y-1"
+              onClick={async () => {
+                try {
+                  const promises = highRiskStudents.map(student => 
+                    createReferral(student.id, 'Bulk referral - High BRI score requires counselling')
+                  );
+                  await Promise.all(promises);
+                  toast({
+                    title: "Bulk Referrals Created",
+                    description: `${highRiskStudents.length} students referred to counsellor`
+                  });
+                } catch (error) {
+                  toast({
+                    title: "Error",
+                    description: "Failed to create bulk referrals",
+                    variant: "destructive"
+                  });
+                }
+              }}
+            >
               <AlertTriangle className="w-5 h-5" />
               <span className="text-sm">Send All High-Risk to Counsellor</span>
             </Button>

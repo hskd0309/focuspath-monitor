@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { Profile } from '@/contexts/AuthContext';
 
 export interface ClassStudentData {
   id: string;
@@ -34,8 +34,7 @@ export interface Complaint {
   created_at: string;
 }
 
-export function useStaffData() {
-  const { profile } = useAuth();
+export function useStaffData(profile: Profile | null) {
   const [cseKStudents, setCseKStudents] = useState<ClassStudentData[]>([]);
   const [cseDStudents, setCseDStudents] = useState<ClassStudentData[]>([]);
   const [cseKStats, setCseKStats] = useState<ClassStats | null>(null);
@@ -59,15 +58,19 @@ export function useStaffData() {
         .select(`
           *,
           profiles!inner(class, full_name),
-          bri_snapshots(bri_score, risk_level, week_start_date)
+          bri_snapshots!left(bri_score, risk_level, week_start_date, contributing_factors)
         `)
+        .order('current_bri', { ascending: false });
         .order('current_bri', { ascending: false });
 
       if (studentsError) throw studentsError;
 
       // Process and anonymize student data
       const processedStudents = studentsData?.map((student, index) => {
-        const latestBRI = student.bri_snapshots?.[0];
+        const latestBRI = student.bri_snapshots?.sort((a, b) => 
+          new Date(b.week_start_date).getTime() - new Date(a.week_start_date).getTime()
+        )?.[0];
+        
         return {
           id: student.id,
           anonymized_id: `STU-${String(index + 1).padStart(3, '0')}`,
@@ -75,7 +78,7 @@ export function useStaffData() {
           overall_attendance_percentage: student.overall_attendance_percentage,
           average_marks: student.average_marks,
           assignments_on_time_percentage: student.assignments_on_time_percentage,
-          risk_level: latestBRI?.risk_level || (student.current_bri > 0.66 ? 'High' : student.current_bri > 0.33 ? 'At Risk' : 'Low'),
+          risk_level: latestBRI?.risk_level || (student.current_bri >= 0.66 ? 'High' : student.current_bri >= 0.33 ? 'At Risk' : 'Low'),
           profiles: {
             class: student.profiles.class,
             // Only include full name for counsellors
@@ -124,13 +127,22 @@ export function useStaffData() {
       };
     }
 
+    // Calculate average sentiment from recent complaints
+    const classComplaints = complaints.filter(c => 
+      students.some(s => s.profiles?.class === c.class)
+    );
+    const avgSentiment = classComplaints.length > 0
+      ? classComplaints.reduce((sum, c) => sum + (c.sentiment_score || 0.5), 0) / classComplaints.length
+      : 0.5;
     return {
       total_students: students.length,
-      avg_bri: students.reduce((sum, s) => sum + s.current_bri, 0) / students.length,
+      avg_bri: Math.round((students.reduce((sum, s) => sum + (s.current_bri * 100), 0) / students.length) * 100) / 100,
       high_risk_count: students.filter(s => s.risk_level === 'High').length,
-      avg_attendance: students.reduce((sum, s) => sum + s.overall_attendance_percentage, 0) / students.length,
-      complaint_count: complaints.filter(c => c.created_at > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()).length,
-      avg_sentiment: 0.6 // Will be calculated from actual sentiment data
+      avg_attendance: Math.round(students.reduce((sum, s) => sum + s.overall_attendance_percentage, 0) / students.length),
+      complaint_count: classComplaints.filter(c => 
+        new Date(c.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      ).length,
+      avg_sentiment: avgSentiment
     };
   };
 
