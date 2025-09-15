@@ -375,31 +375,29 @@ const ClassAnalytics: React.FC<ClassAnalyticsProps> = ({ className }) => {
 
       {/* Complaint Feed */}
       <Card className="dashboard-card">
-              {recentComplaints.slice(0, 5).map((complaint) => (
+        <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MessageSquare className="w-5 h-5" />
             Recent Anonymous Complaints
-                      <p className="text-gray-800">{complaint.content}</p>
-                      <p className="text-xs text-gray-500 mt-2">
-                        {new Date(complaint.created_at).toLocaleString()}
-                      </p>
+          </CardTitle>
+        </CardHeader>
         <CardContent>
           <div className="space-y-4">
-                      complaint.sentiment_label === 'Positive' ? 'bg-green-100 text-green-800' :
-                      complaint.sentiment_label === 'Negative' ? 'bg-red-100 text-red-800' :
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                      {complaint.sentiment_label || 'Neutral'}
-                    <p className="text-xs text-gray-500 mt-2">{complaint.timestamp}</p>
-                  </div>
-                  <Badge className={`ml-4 ${
-                    complaint.sentiment === 'positive' ? 'bg-green-100 text-green-800' :
-                    complaint.sentiment === 'negative' ? 'bg-red-100 text-red-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>
-                    {complaint.sentiment}
-                  </Badge>
+            {recentComplaints.slice(0, 5).map((complaint) => (
+              <div key={complaint.id} className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-gray-800">{complaint.content}</p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {new Date(complaint.created_at).toLocaleString()}
+                  </p>
                 </div>
+                <Badge className={`ml-4 ${
+                  complaint.sentiment_label === 'Positive' ? 'bg-green-100 text-green-800' :
+                  complaint.sentiment_label === 'Negative' ? 'bg-red-100 text-red-800' :
+                  'bg-gray-100 text-gray-800'
+                }`}>
+                  {complaint.sentiment_label || 'Neutral'}
+                </Badge>
               </div>
             ))}
           </div>
