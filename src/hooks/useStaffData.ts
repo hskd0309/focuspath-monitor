@@ -61,7 +61,6 @@ export function useStaffData(profile: Profile | null) {
           bri_snapshots!left(bri_score, risk_level, week_start_date, contributing_factors)
         `)
         .order('current_bri', { ascending: false });
-        .order('current_bri', { ascending: false });
 
       if (studentsError) throw studentsError;
 

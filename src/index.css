@@ -149,16 +149,8 @@
     }
     
     /* Mobile grid adjustments */
-    .grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-4.xl\\:grid-cols-5 {
-      @apply grid-cols-2;
-    }
-    
-    .grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-4 {
-      @apply grid-cols-2;
-    }
-    
-    .grid-cols-1.md\\:grid-cols-4 {
-      @apply grid-cols-2;
+    .mobile-grid-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     
     /* Mobile text adjustments */
@@ -205,12 +197,8 @@
   
   /* Tablet adjustments */
   @media (min-width: 769px) and (max-width: 1024px) {
-    .grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-4.xl\\:grid-cols-5 {
-      @apply grid-cols-3;
-    }
-    
-    .grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-4 {
-      @apply grid-cols-3;
+    .tablet-grid-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
   /* Ensure cards have consistent styling */

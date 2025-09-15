@@ -3,7 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
 import ChatBot from '@/components/ChatBot';
 import AdminDashboard from './AdminDashboard';
-import AdminUsers from './AdminUsers';
+import AdminStudentManagement from './AdminStudentManagement';
 import AdminReports from './AdminReports';
 
 const AdminLayout: React.FC = () => {
@@ -15,7 +15,7 @@ const AdminLayout: React.FC = () => {
       case 'dashboard':
         return <AdminDashboard />;
       case 'users':
-        return <AdminUsers />;
+        return <AdminStudentManagement />;
       case 'reports':
         return <AdminReports />;
       default:
