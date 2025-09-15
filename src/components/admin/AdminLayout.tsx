@@ -1,48 +1,39 @@
 import React, { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
 import ChatBot from '@/components/ChatBot';
 import AdminDashboard from './AdminDashboard';
-import AdminStudentManagement from './AdminStudentManagement';
-import AdminDataManagement from './AdminDataManagement';
-import AdminAnalytics from './AdminAnalytics';
-import AdminSettings from './AdminSettings';
+import AdminUsers from './AdminUsers';
 import AdminReports from './AdminReports';
 
 const AdminLayout: React.FC = () => {
+  const { profile } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
 
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <AdminDashboard onPageChange={setCurrentPage} />;
-      case 'analytics':
-        return <AdminAnalytics />;
-      case 'students':
-        return <AdminStudentManagement />;
-      case 'staff':
-        return <AdminDataManagement />;
-      case 'settings':
-        return <AdminSettings />;
+        return <AdminDashboard />;
+      case 'users':
+        return <AdminUsers />;
       case 'reports':
         return <AdminReports />;
       default:
-        return <AdminDashboard onPageChange={setCurrentPage} />;
+        return <AdminDashboard />;
     }
   };
 
   return (
-    <div className="min-h-screen bg-dashboard-bg">
+    <div className="min-h-screen bg-gray-50">
       <Navigation
         userType="admin"
-        userName="ADMIN001"
+        userName={profile?.full_name || "ADMIN001"}
         currentPage={currentPage}
         onPageChange={setCurrentPage}
       />
-      
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="pt-16">
         {renderPage()}
       </main>
-
       <ChatBot />
     </div>
   );

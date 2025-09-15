@@ -129,6 +129,90 @@
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
 
+  /* Mobile Responsive Design */
+  @media (max-width: 768px) {
+    .dashboard-card {
+      @apply p-4;
+    }
+    
+    .kpi-card {
+      @apply p-4;
+    }
+    
+    .chart-container {
+      @apply p-4;
+    }
+    
+    /* Mobile navigation adjustments */
+    .nav-link {
+      @apply px-2 py-1 text-sm;
+    }
+    
+    /* Mobile grid adjustments */
+    .grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-4.xl\\:grid-cols-5 {
+      @apply grid-cols-2;
+    }
+    
+    .grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-4 {
+      @apply grid-cols-2;
+    }
+    
+    .grid-cols-1.md\\:grid-cols-4 {
+      @apply grid-cols-2;
+    }
+    
+    /* Mobile text adjustments */
+    .text-3xl {
+      @apply text-2xl;
+    }
+    
+    .text-4xl {
+      @apply text-3xl;
+    }
+    
+    /* Mobile spacing */
+    .space-y-8 > * + * {
+      @apply mt-6;
+    }
+    
+    .space-y-6 > * + * {
+      @apply mt-4;
+    }
+    
+    /* Mobile chat adjustments */
+    .fixed.bottom-6.right-6.w-80.h-96 {
+      @apply w-full h-full bottom-0 right-0 rounded-none;
+    }
+    
+    /* Mobile table adjustments */
+    .overflow-x-auto {
+      @apply -mx-4;
+    }
+    
+    /* Mobile form adjustments */
+    .grid.grid-cols-1.md\\:grid-cols-2.gap-4 {
+      @apply grid-cols-1 gap-3;
+    }
+    
+    .grid.grid-cols-1.md\\:grid-cols-3.gap-4 {
+      @apply grid-cols-1 gap-3;
+    }
+    
+    .grid.grid-cols-1.md\\:grid-cols-4.gap-4 {
+      @apply grid-cols-1 gap-3;
+    }
+  }
+  
+  /* Tablet adjustments */
+  @media (min-width: 769px) and (max-width: 1024px) {
+    .grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-4.xl\\:grid-cols-5 {
+      @apply grid-cols-3;
+    }
+    
+    .grid-cols-1.md\\:grid-cols-2.lg\\:grid-cols-3.xl\\:grid-cols-4 {
+      @apply grid-cols-3;
+    }
+  }
   /* Ensure cards have consistent styling */
   .card {
     @apply bg-white;
