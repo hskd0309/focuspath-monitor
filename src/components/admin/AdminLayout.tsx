@@ -4,6 +4,9 @@ import Navigation from '@/components/Navigation';
 import ChatBot from '@/components/ChatBot';
 import AdminDashboard from './AdminDashboard';
 import AdminStudentManagement from './AdminStudentManagement';
+import AdminDataManagement from './AdminDataManagement';
+import AdminSettings from './AdminSettings';
+import AdminAnalytics from './AdminAnalytics';
 import AdminReports from './AdminReports';
 
 const AdminLayout: React.FC = () => {
@@ -13,27 +16,35 @@ const AdminLayout: React.FC = () => {
   const renderPage = () => {
     switch (currentPage) {
       case 'dashboard':
-        return <AdminDashboard />;
-      case 'users':
+        return <AdminDashboard onPageChange={setCurrentPage} />;
+      case 'analytics':
+        return <AdminAnalytics />;
+      case 'students':
         return <AdminStudentManagement />;
+      case 'staff':
+        return <AdminDataManagement />;
+      case 'settings':
+        return <AdminSettings />;
       case 'reports':
         return <AdminReports />;
       default:
-        return <AdminDashboard />;
+        return <AdminDashboard onPageChange={setCurrentPage} />;
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-dashboard-bg">
       <Navigation
         userType="admin"
         userName={profile?.full_name || "ADMIN001"}
         currentPage={currentPage}
         onPageChange={setCurrentPage}
       />
-      <main className="pt-16">
+      
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {renderPage()}
       </main>
+
       <ChatBot />
     </div>
   );

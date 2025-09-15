@@ -7,7 +7,7 @@ import { TrendingUp, TrendingDown, Calendar, CheckCircle, AlertCircle, Smile } f
 
 const StudentDashboard: React.FC = () => {
   const { profile } = useAuth();
-  const { studentData, attendanceRecords, loading } = useStudentData(profile);
+  const { studentData, attendanceRecords, briHistory, loading } = useStudentData(profile);
 
   if (loading) {
     return (
@@ -36,15 +36,13 @@ const StudentDashboard: React.FC = () => {
   const avgMarks = Math.round(studentData.average_marks || 0);
   const assignmentsOnTime = Math.round(studentData.assignments_on_time_percentage || 0);
   
-  // Generate BRI history from recent data (mock for now, will be replaced with actual snapshots)
-  const briHistory = [
-    { month: 'Jan', score: Math.max(0, briScore - 15 + Math.random() * 10) },
-    { month: 'Feb', score: Math.max(0, briScore - 10 + Math.random() * 10) },
-    { month: 'Mar', score: Math.max(0, briScore - 5 + Math.random() * 10) },
-    { month: 'Apr', score: Math.max(0, briScore - 8 + Math.random() * 10) },
-    { month: 'May', score: Math.max(0, briScore - 3 + Math.random() * 10) },
-    { month: 'Jun', score: briScore }
-  ];
+  // Process BRI history for chart
+  const briHistoryChart = briHistory.length > 0 
+    ? briHistory.reverse().map(snapshot => ({
+        month: new Date(snapshot.week_start_date).toLocaleDateString('en-US', { month: 'short' }),
+        score: Math.round(snapshot.bri_score * 100)
+      }))
+    : [{ month: 'Current', score: briScore }];
 
   // Calculate attendance data from records
   const presentDays = attendanceRecords.filter(r => r.is_present).length;
@@ -56,6 +54,7 @@ const StudentDashboard: React.FC = () => {
 
   // Determine sentiment based on BRI score
   const sentiment = briScore >= 70 ? 'positive' : briScore >= 50 ? 'neutral' : 'negative';
+  
   const getBriColor = (score: number) => {
     if (score >= 70) return 'text-green-600';
     if (score >= 50) return 'text-yellow-600';
@@ -172,7 +171,7 @@ const StudentDashboard: React.FC = () => {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={briHistory}>
+              <LineChart data={briHistoryChart}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="month" stroke="#6b7280" />
                 <YAxis stroke="#6b7280" />
@@ -218,7 +217,7 @@ const StudentDashboard: React.FC = () => {
               {attendanceData.map((entry, index) => (
                 <div key={index} className="flex items-center space-x-2">
                   <div className="w-3 h-3 rounded-full" style={{ backgroundColor: entry.fill }}></div>
-                  <span className="text-sm text-gray-600">{entry.name}: {entry.value}%</span>
+                  <span className="text-sm text-gray-600">{entry.name}: {entry.value} days</span>
                 </div>
               ))}
             </div>

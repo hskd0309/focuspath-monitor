@@ -19,10 +19,18 @@ export function useAuth() {
 
   const checkAuthState = async () => {
     try {
-      // Check if user is logged in (stored in localStorage for demo)
-      const storedProfile = localStorage.getItem('user_profile');
-      if (storedProfile) {
-        setProfile(JSON.parse(storedProfile));
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        // Get user profile
+        const { data: profileData, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', session.user.id)
+          .single();
+
+        if (error) throw error;
+        setProfile(profileData);
       }
     } catch (error) {
       console.error('Error checking auth state:', error);
@@ -35,40 +43,48 @@ export function useAuth() {
     try {
       setLoading(true);
       
-      let response;
       if (credentials.roll_no) {
-        // Student login
-        response = await supabase.functions.invoke('auth-handler', {
-          body: {
-            action: 'student_login',
-            roll_no: credentials.roll_no,
-            password: credentials.password,
-            class: credentials.class
-          }
+        // Student login - use roll number as email
+        const email = `${credentials.roll_no}@student.edu`;
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password: credentials.password
         });
+
+        if (error) throw error;
+
+        // Verify student belongs to correct class
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', data.user.id)
+          .eq('class', credentials.class)
+          .single();
+
+        if (profileError || !profile) {
+          await supabase.auth.signOut();
+          throw new Error('Invalid class selection');
+        }
+
+        setProfile(profile);
       } else {
         // Staff login
-        response = await supabase.functions.invoke('auth-handler', {
-          body: {
-            action: 'staff_login',
-            email: credentials.email,
-            password: credentials.password
-          }
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: credentials.email!,
+          password: credentials.password
         });
-      }
 
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
+        if (error) throw error;
 
-      const { data } = response;
-      if (!data.success) {
-        throw new Error(data.error || 'Login failed');
-      }
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', data.user.id)
+          .single();
 
-      // Store profile in localStorage for demo
-      localStorage.setItem('user_profile', JSON.stringify(data.profile));
-      setProfile(data.profile);
+        if (profileError) throw error;
+        setProfile(profile);
+      }
       
       return { error: undefined };
     } catch (error: any) {
@@ -80,7 +96,7 @@ export function useAuth() {
   };
 
   const signOut = async () => {
-    localStorage.removeItem('user_profile');
+    await supabase.auth.signOut();
     setProfile(null);
   };
 

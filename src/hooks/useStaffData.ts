@@ -12,7 +12,8 @@ export interface ClassStudentData {
   risk_level: 'Low' | 'At Risk' | 'High';
   profiles?: {
     class: string;
-    full_name?: string; // Only for counsellors
+    full_name?: string;
+    is_active?: boolean;
   };
 }
 
@@ -31,6 +32,7 @@ export interface Complaint {
   category: string;
   sentiment_score?: number;
   sentiment_label?: string;
+  class?: string;
   created_at: string;
 }
 
@@ -52,15 +54,14 @@ export function useStaffData(profile: Profile | null) {
     try {
       setLoading(true);
 
-      // Fetch students data
+      // Fetch students data with BRI snapshots
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
         .select(`
           *,
-          profiles!inner(class, full_name),
+          profiles!inner(class, full_name, is_active),
           bri_snapshots!left(bri_score, risk_level, week_start_date, contributing_factors)
-        `)
-        .order('current_bri', { ascending: false });
+        `);
 
       if (studentsError) throw studentsError;
 
@@ -70,16 +71,22 @@ export function useStaffData(profile: Profile | null) {
           new Date(b.week_start_date).getTime() - new Date(a.week_start_date).getTime()
         )?.[0];
         
+        // Determine risk level based on BRI score
+        let riskLevel = 'Low';
+        if (student.current_bri >= 0.66) riskLevel = 'High';
+        else if (student.current_bri >= 0.33) riskLevel = 'At Risk';
+        
         return {
           id: student.id,
           anonymized_id: `STU-${String(index + 1).padStart(3, '0')}`,
-          current_bri: student.current_bri,
-          overall_attendance_percentage: student.overall_attendance_percentage,
-          average_marks: student.average_marks,
-          assignments_on_time_percentage: student.assignments_on_time_percentage,
-          risk_level: latestBRI?.risk_level || (student.current_bri >= 0.66 ? 'High' : student.current_bri >= 0.33 ? 'At Risk' : 'Low'),
+          current_bri: student.current_bri || 0.5,
+          overall_attendance_percentage: student.overall_attendance_percentage || 0,
+          average_marks: student.average_marks || 0,
+          assignments_on_time_percentage: student.assignments_on_time_percentage || 0,
+          risk_level: latestBRI?.risk_level || riskLevel,
           profiles: {
             class: student.profiles.class,
+            is_active: student.profiles.is_active,
             // Only include full name for counsellors
             ...(profile?.role === 'counsellor' && { full_name: student.profiles.full_name })
           }
@@ -93,10 +100,6 @@ export function useStaffData(profile: Profile | null) {
       setCseKStudents(cseK);
       setCseDStudents(cseD);
 
-      // Calculate class statistics
-      setCseKStats(calculateClassStats(cseK));
-      setCseDStats(calculateClassStats(cseD));
-
       // Fetch complaints
       const { data: complaintsData, error: complaintsError } = await supabase
         .from('complaints')
@@ -107,6 +110,10 @@ export function useStaffData(profile: Profile | null) {
       if (complaintsError) throw complaintsError;
       setComplaints(complaintsData || []);
 
+      // Calculate class statistics
+      setCseKStats(calculateClassStats(cseK, complaintsData || []));
+      setCseDStats(calculateClassStats(cseD, complaintsData || []));
+
     } catch (error) {
       console.error('Error fetching staff data:', error);
     } finally {
@@ -114,7 +121,7 @@ export function useStaffData(profile: Profile | null) {
     }
   };
 
-  const calculateClassStats = (students: ClassStudentData[]): ClassStats => {
+  const calculateClassStats = (students: ClassStudentData[], allComplaints: Complaint[]): ClassStats => {
     if (students.length === 0) {
       return {
         total_students: 0,
@@ -122,25 +129,29 @@ export function useStaffData(profile: Profile | null) {
         high_risk_count: 0,
         avg_attendance: 0,
         complaint_count: 0,
-        avg_sentiment: 0
+        avg_sentiment: 0.5
       };
     }
 
-    // Calculate average sentiment from recent complaints
-    const classComplaints = complaints.filter(c => 
-      students.some(s => s.profiles?.class === c.class)
+    // Get class name from first student
+    const className = students[0]?.profiles?.class;
+    
+    // Calculate average sentiment from recent complaints for this class
+    const classComplaints = allComplaints.filter(c => c.class === className);
+    const recentComplaints = classComplaints.filter(c => 
+      new Date(c.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     );
+    
     const avgSentiment = classComplaints.length > 0
       ? classComplaints.reduce((sum, c) => sum + (c.sentiment_score || 0.5), 0) / classComplaints.length
       : 0.5;
+
     return {
       total_students: students.length,
-      avg_bri: Math.round((students.reduce((sum, s) => sum + (s.current_bri * 100), 0) / students.length) * 100) / 100,
+      avg_bri: students.reduce((sum, s) => sum + s.current_bri, 0) / students.length,
       high_risk_count: students.filter(s => s.risk_level === 'High').length,
-      avg_attendance: Math.round(students.reduce((sum, s) => sum + s.overall_attendance_percentage, 0) / students.length),
-      complaint_count: classComplaints.filter(c => 
-        new Date(c.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-      ).length,
+      avg_attendance: students.reduce((sum, s) => sum + s.overall_attendance_percentage, 0) / students.length,
+      complaint_count: recentComplaints.length,
       avg_sentiment: avgSentiment
     };
   };
@@ -159,7 +170,7 @@ export function useStaffData(profile: Profile | null) {
       if (error) throw error;
       
       return { success: true };
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating referral:', error);
       return { success: false, error: error.message };
     }

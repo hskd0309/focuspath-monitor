@@ -38,6 +38,7 @@ export interface Assignment {
   id: string;
   title: string;
   due_date: string;
+  description?: string;
   subjects: {
     name: string;
     code: string;
@@ -48,11 +49,20 @@ export interface Assignment {
   }[];
 }
 
+export interface BRISnapshot {
+  id: string;
+  bri_score: number;
+  risk_level: string;
+  contributing_factors: string[];
+  week_start_date: string;
+}
+
 export function useStudentData(profile: Profile | null) {
   const [studentData, setStudentData] = useState<StudentData | null>(null);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [briHistory, setBriHistory] = useState<BRISnapshot[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -65,14 +75,14 @@ export function useStudentData(profile: Profile | null) {
     try {
       setLoading(true);
 
-      // Get student record by roll number
+      // Get student record
       const { data: student, error: studentError } = await supabase
         .from('students')
         .select(`
           *,
           profiles!inner(class, full_name)
         `)
-        .eq('profiles.roll_no', profile?.roll_no)
+        .eq('profile_id', profile?.id)
         .single();
 
       if (studentError) throw studentError;
@@ -111,20 +121,32 @@ export function useStudentData(profile: Profile | null) {
       if (testsError) throw testsError;
       setTestResults(tests || []);
 
-      // Get assignments and submissions for student's class
+      // Get assignments for student's class
       const { data: assignmentList, error: assignmentsError } = await supabase
         .from('assignments')
         .select(`
           *,
           subjects!inner(name, code),
-          assignment_submissions(submitted_at, is_on_time)
+          assignment_submissions!left(submitted_at, is_on_time)
         `)
         .eq('class', student.profiles.class)
+        .eq('assignment_submissions.student_id', student.id)
         .order('due_date', { ascending: false })
         .limit(30);
 
       if (assignmentsError) throw assignmentsError;
       setAssignments(assignmentList || []);
+
+      // Get BRI history (last 8 weeks)
+      const { data: briData, error: briError } = await supabase
+        .from('bri_snapshots')
+        .select('*')
+        .eq('student_id', student.id)
+        .order('week_start_date', { ascending: false })
+        .limit(8);
+
+      if (briError) throw briError;
+      setBriHistory(briData || []);
 
     } catch (error) {
       console.error('Error fetching student data:', error);
@@ -145,6 +167,9 @@ export function useStudentData(profile: Profile | null) {
 
       // Update local state
       setStudentData(prev => prev ? { ...prev, current_bri: data.bri_score } : null);
+      
+      // Refresh BRI history
+      await fetchStudentData();
     } catch (error) {
       console.error('Error refreshing BRI:', error);
     }
@@ -155,6 +180,7 @@ export function useStudentData(profile: Profile | null) {
     attendanceRecords,
     testResults,
     assignments,
+    briHistory,
     loading,
     refreshData: fetchStudentData,
     refreshBRI
