@@ -169,10 +169,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    setUser(null);
-    setSession(null);
-    setProfile(null);
-    await supabase.auth.signOut();
+    try {
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      await supabase.auth.signOut();
+      // Force page reload to clear any cached state
+      window.location.href = '/';
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Even if there's an error, clear local state and redirect
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      window.location.href = '/';
+    }
   };
 
   const refreshProfile = async () => {
