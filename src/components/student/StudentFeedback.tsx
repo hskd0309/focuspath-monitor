@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
@@ -6,39 +6,26 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MessageSquare, Send, CheckCircle, Clock, Star } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+
+interface Complaint {
+  id: string;
+  content: string;
+  category: string;
+  sentiment_score: number | null;
+  sentiment_label: string | null;
+  created_at: string;
+}
 
 const StudentFeedback: React.FC = () => {
+  const { profile } = useAuth();
   const [feedback, setFeedback] = useState('');
   const [category, setCategory] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-
-  const [submittedFeedback] = useState([
-    {
-      id: '1',
-      text: 'The new cafeteria menu has really improved!',
-      category: 'facilities',
-      status: 'reviewed',
-      submittedDate: '2024-09-05',
-      response: 'Thank you for your feedback! We\'re glad you\'re enjoying the new menu options.'
-    },
-    {
-      id: '2',
-      text: 'Would like more study spaces in the library',
-      category: 'academic',
-      status: 'pending',
-      submittedDate: '2024-09-03',
-      response: null
-    },
-    {
-      id: '3',
-      text: 'The math course workload feels overwhelming',
-      category: 'academic',
-      status: 'in-review',
-      submittedDate: '2024-09-01',
-      response: null
-    }
-  ]);
 
   const categories = [
     { value: 'academic', label: 'Academic & Courses' },
@@ -49,35 +36,101 @@ const StudentFeedback: React.FC = () => {
     { value: 'other', label: 'Other' }
   ];
 
+  useEffect(() => {
+    if (profile) {
+      fetchComplaints();
+    }
+  }, [profile]);
+
+  const fetchComplaints = async () => {
+    try {
+      setLoading(true);
+      const { data } = await supabase
+        .from('complaints')
+        .select('*')
+        .eq('class', profile?.class)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (data) {
+        setComplaints(data);
+      }
+    } catch (error) {
+      console.error('Error fetching complaints:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (feedback.length < 1) {
+    if (feedback.length < 10 || !category) {
+      toast({
+        title: "Invalid Input",
+        description: "Please provide both category and detailed feedback (minimum 10 characters).",
+        variant: "destructive"
+      });
       return;
     }
 
     setIsSubmitting(true);
     
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // Submit complaint anonymously to database
+      const { data, error } = await supabase
+        .from('complaints')
+        .insert({
+          content: feedback,
+          category: category,
+          class: profile?.class
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Call ML sentiment analysis edge function
+      try {
+        await supabase.functions.invoke('ml-sentiment-analysis', {
+          body: {
+            text: feedback,
+            complaintId: data.id
+          }
+        });
+      } catch (mlError) {
+        console.error('ML analysis failed:', mlError);
+        // Continue anyway - the complaint was submitted
+      }
+
       toast({
         title: "Feedback Submitted",
-        description: "Your feedback has been submitted successfully!"
+        description: "Your anonymous feedback has been submitted successfully!"
       });
+      
       setFeedback('');
       setCategory('');
+      fetchComplaints(); // Refresh complaints list
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      toast({
+        title: "Submission Failed",
+        description: "There was an error submitting your feedback. Please try again.",
+        variant: "destructive"
+      });
+    } finally {
       setIsSubmitting(false);
-    }, 1500);
+    }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return <Badge className="bg-yellow-100 text-yellow-800"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
-      case 'in-review':
-        return <Badge className="bg-blue-100 text-blue-800"><Star className="w-3 h-3 mr-1" />In Review</Badge>;
-      case 'reviewed':
-        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Reviewed</Badge>;
+  const getSentimentBadge = (sentiment: string | null, score: number | null) => {
+    if (!sentiment) return <Badge variant="outline">Analyzing...</Badge>;
+    
+    switch (sentiment.toLowerCase()) {
+      case 'positive':
+        return <Badge className="bg-green-100 text-green-800">😊 Positive</Badge>;
+      case 'negative':
+        return <Badge className="bg-red-100 text-red-800">😟 Negative</Badge>;
       default:
-        return <Badge variant="outline">Unknown</Badge>;
+        return <Badge className="bg-gray-100 text-gray-800">😐 Neutral</Badge>;
     }
   };
 
@@ -85,11 +138,22 @@ const StudentFeedback: React.FC = () => {
     return categories.find(cat => cat.value === value)?.label || value;
   };
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in p-4 md:p-6">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Feedback & Suggestions</h1>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2 flex items-center justify-center gap-2">
+          <MessageSquare className="w-6 md:w-8 h-6 md:h-8 text-blue-600" />
+          Feedback & Suggestions
+        </h1>
         <p className="text-gray-600">Share your thoughts anonymously to help improve our campus</p>
       </div>
 
@@ -138,7 +202,7 @@ const StudentFeedback: React.FC = () => {
 
           <Button 
             onClick={handleSubmit} 
-            disabled={isSubmitting || feedback.length < 1}
+            disabled={isSubmitting || feedback.length < 10 || !category}
             className="w-full"
           >
             {isSubmitting ? (
@@ -156,36 +220,40 @@ const StudentFeedback: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Previous Feedback */}
+      {/* Recent Feedback from Class */}
       <Card className="dashboard-card">
         <CardHeader>
-          <CardTitle>Your Previous Feedback</CardTitle>
+          <CardTitle>Recent Class Feedback</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {submittedFeedback.map((item) => (
-              <div key={item.id} className="p-4 bg-gray-50 rounded-lg border">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center space-x-3">
-                    <Badge variant="outline" className="text-xs">
-                      {getCategoryLabel(item.category)}
-                    </Badge>
-                    {getStatusBadge(item.status)}
+          {loading ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {complaints.length > 0 ? complaints.map((complaint) => (
+                <div key={complaint.id} className="p-4 bg-gray-50 rounded-lg border">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center space-x-3">
+                      <Badge variant="outline" className="text-xs">
+                        {getCategoryLabel(complaint.category)}
+                      </Badge>
+                      {getSentimentBadge(complaint.sentiment_label, complaint.sentiment_score)}
+                    </div>
+                    <span className="text-xs text-gray-500">{formatDate(complaint.created_at)}</span>
                   </div>
-                  <span className="text-xs text-gray-500">{item.submittedDate}</span>
+                  
+                  <p className="text-gray-700">{complaint.content}</p>
                 </div>
-                
-                <p className="text-gray-700 mb-3">{item.text}</p>
-                
-                {item.response && (
-                  <div className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded-r-lg">
-                    <p className="text-sm font-medium text-blue-800 mb-1">Administration Response:</p>
-                    <p className="text-sm text-blue-700">{item.response}</p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+              )) : (
+                <div className="text-center py-8 text-gray-500">
+                  <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>No feedback has been submitted for your class yet</p>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -195,9 +263,9 @@ const StudentFeedback: React.FC = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Total Submitted</p>
-                <p className="text-3xl font-bold text-blue-600">{submittedFeedback.length}</p>
-                <p className="text-xs text-gray-500 mt-1">This semester</p>
+                <p className="text-sm font-medium text-gray-600">Class Feedback</p>
+                <p className="text-3xl font-bold text-blue-600">{complaints.length}</p>
+                <p className="text-xs text-gray-500 mt-1">Total submissions</p>
               </div>
               <MessageSquare className="w-8 h-8 text-blue-600" />
             </div>
@@ -208,26 +276,31 @@ const StudentFeedback: React.FC = () => {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Reviewed</p>
+                <p className="text-sm font-medium text-gray-600">Positive</p>
                 <p className="text-3xl font-bold text-green-600">
-                  {submittedFeedback.filter(f => f.status === 'reviewed').length}
+                  {complaints.filter(c => c.sentiment_label === 'positive').length}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Responses received</p>
+                <p className="text-xs text-gray-500 mt-1">Positive feedback</p>
               </div>
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
           </CardContent>
         </Card>
 
-        <Card className="kpi-card bg-gradient-to-br from-white to-yellow-50">
+        <Card className="kpi-card bg-gradient-to-br from-white to-purple-50">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-600">Response Rate</p>
-                <p className="text-3xl font-bold text-yellow-600">33%</p>
-                <p className="text-xs text-gray-500 mt-1">Average response time</p>
+                <p className="text-sm font-medium text-gray-600">Avg Sentiment</p>
+                <p className="text-3xl font-bold text-purple-600">
+                  {complaints.length > 0 
+                    ? (complaints.reduce((sum, c) => sum + (c.sentiment_score || 0), 0) / complaints.length).toFixed(1)
+                    : '0.0'
+                  }
+                </p>
+                <p className="text-xs text-gray-500 mt-1">Sentiment score</p>
               </div>
-              <Star className="w-8 h-8 text-yellow-600" />
+              <Star className="w-8 h-8 text-purple-600" />
             </div>
           </CardContent>
         </Card>

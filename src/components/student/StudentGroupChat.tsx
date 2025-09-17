@@ -1,54 +1,224 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Send, Users, MessageCircle, Heart, ThumbsUp } from 'lucide-react';
-import { chatMessages } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { format } from 'date-fns';
+
+interface Message {
+  id: string;
+  message: string;
+  created_at: string;
+  sentiment_score: number | null;
+  sentiment_label: string | null;
+  student: {
+    profile: {
+      roll_no: string;
+    };
+  };
+}
 
 const StudentGroupChat: React.FC = () => {
+  const { profile } = useAuth();
   const [newMessage, setNewMessage] = useState('');
-  const [messages, setMessages] = useState(chatMessages);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [onlineCount, setOnlineCount] = useState(1);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
+  useEffect(() => {
+    if (profile?.role === 'student') {
+      fetchMessages();
+      setupRealtimeSubscription();
+    }
+  }, [profile]);
 
-    const message = {
-      id: (messages.length + 1).toString(),
-      sender: 'Anon-005',
-      message: newMessage,
-      timestamp: new Date().toLocaleString(),
-      sentiment: 'neutral'
-    };
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
-    setMessages([...messages, message]);
-    setNewMessage('');
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const getSentimentBadge = (sentiment: string) => {
-    switch (sentiment) {
-      case 'positive':
-        return <Badge className="bg-green-100 text-green-800 text-xs">😊 Positive</Badge>;
-      case 'negative':
-        return <Badge className="bg-red-100 text-red-800 text-xs">😟 Negative</Badge>;
-      default:
-        return <Badge className="bg-gray-100 text-gray-800 text-xs">😐 Neutral</Badge>;
+  const fetchMessages = async () => {
+    try {
+      setLoading(true);
+      
+      const { data } = await supabase
+        .from('group_chat_messages')
+        .select(`
+          id,
+          message,
+          created_at,
+          sentiment_score,
+          sentiment_label,
+          students:student_id (
+            profiles:profile_id (
+              roll_no
+            )
+          )
+        `)
+        .order('created_at', { ascending: true })
+        .limit(50);
+
+      if (data) {
+        setMessages(data.map(msg => ({
+          ...msg,
+          student: {
+            profile: {
+              roll_no: msg.students?.profiles?.roll_no || 'Anonymous'
+            }
+          }
+        })));
+      }
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const getSentimentColor = (sentiment: string) => {
-    switch (sentiment) {
+  const setupRealtimeSubscription = () => {
+    const channel = supabase
+      .channel('group_chat_messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'group_chat_messages'
+        },
+        (payload) => {
+          const newMessage = payload.new as any;
+          setMessages(prev => [...prev, {
+            ...newMessage,
+            student: {
+              profile: {
+                roll_no: 'Anonymous'
+              }
+            }
+          }]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim()) return;
+
+    try {
+      // Get student record
+      const { data: studentData } = await supabase
+        .from('students')
+        .select('id')
+        .eq('profile_id', profile?.id)
+        .single();
+
+      if (!studentData) return;
+
+      // Send message
+      const { data, error } = await supabase
+        .from('group_chat_messages')
+        .insert({
+          message: newMessage,
+          student_id: studentData.id
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Call ML sentiment analysis
+      try {
+        await supabase.functions.invoke('ml-sentiment-analysis', {
+          body: {
+            text: newMessage,
+            messageId: data.id,
+            type: 'group_chat'
+          }
+        });
+      } catch (mlError) {
+        console.error('ML analysis failed:', mlError);
+      }
+
+      setNewMessage('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
+  };
+
+  const getSentimentBadge = (sentiment: string | null) => {
+    if (!sentiment) return null;
+    
+    switch (sentiment.toLowerCase()) {
+      case 'positive':
+        return <Badge className="bg-green-100 text-green-800 text-xs">😊</Badge>;
+      case 'negative':
+        return <Badge className="bg-red-100 text-red-800 text-xs">😟</Badge>;
+      default:
+        return <Badge className="bg-gray-100 text-gray-800 text-xs">😐</Badge>;
+    }
+  };
+
+  const getSentimentColor = (sentiment: string | null) => {
+    switch (sentiment?.toLowerCase()) {
       case 'positive': return 'border-l-green-500 bg-green-50';
       case 'negative': return 'border-l-red-500 bg-red-50';
       default: return 'border-l-gray-500 bg-gray-50';
     }
   };
 
+  const getAnonymizedName = (rollNo: string) => {
+    // Simple anonymization - could be more sophisticated
+    const hash = rollNo.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    return `Anon-${Math.abs(hash % 1000).toString().padStart(3, '0')}`;
+  };
+
+  const calculateStats = () => {
+    const todayMessages = messages.filter(msg => 
+      new Date(msg.created_at).toDateString() === new Date().toDateString()
+    );
+    
+    const sentimentSum = messages.reduce((sum, msg) => 
+      sum + (msg.sentiment_score || 0), 0
+    );
+    const avgSentiment = messages.length > 0 ? sentimentSum / messages.length : 0;
+    
+    return {
+      todayCount: todayMessages.length,
+      moodScore: (avgSentiment * 5 + 5).toFixed(1) // Convert to 0-10 scale
+    };
+  };
+
+  const stats = calculateStats();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in p-4 md:p-6">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Class Group Chat</h1>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2 flex items-center justify-center gap-2">
+          <MessageCircle className="w-6 md:w-8 h-6 md:h-8 text-blue-600" />
+          Class Group Chat
+        </h1>
         <p className="text-gray-600">Connect with your classmates anonymously</p>
       </div>
 
@@ -59,7 +229,7 @@ const StudentGroupChat: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Online Members</p>
-                <p className="text-3xl font-bold text-blue-600">24</p>
+                <p className="text-3xl font-bold text-blue-600">{onlineCount}</p>
                 <p className="text-xs text-gray-500 mt-1">Active now</p>
               </div>
               <Users className="w-8 h-8 text-blue-600" />
@@ -72,7 +242,7 @@ const StudentGroupChat: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Messages Today</p>
-                <p className="text-3xl font-bold text-green-600">47</p>
+                <p className="text-3xl font-bold text-green-600">{stats.todayCount}</p>
                 <p className="text-xs text-gray-500 mt-1">Class discussions</p>
               </div>
               <MessageCircle className="w-8 h-8 text-green-600" />
@@ -85,7 +255,7 @@ const StudentGroupChat: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Mood Score</p>
-                <p className="text-3xl font-bold text-purple-600">7.2</p>
+                <p className="text-3xl font-bold text-purple-600">{stats.moodScore}</p>
                 <p className="text-xs text-gray-500 mt-1">Class sentiment</p>
               </div>
               <Heart className="w-8 h-8 text-purple-600" />
@@ -99,7 +269,7 @@ const StudentGroupChat: React.FC = () => {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <MessageCircle className="w-5 h-5" />
-            CSE-K Group Chat
+            {profile?.class} Group Chat
             <Badge className="bg-blue-100 text-blue-800 ml-auto">Anonymous</Badge>
           </CardTitle>
         </CardHeader>
@@ -107,13 +277,17 @@ const StudentGroupChat: React.FC = () => {
           {/* Messages Area */}
           <div className="h-96 overflow-y-auto p-6 space-y-4">
             {messages.map((message) => (
-              <div key={message.id} className={`border-l-4 pl-4 py-3 rounded-r-lg ${getSentimentColor(message.sentiment)}`}>
+              <div key={message.id} className={`border-l-4 pl-4 py-3 rounded-r-lg ${getSentimentColor(message.sentiment_label)}`}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-2">
-                      <span className="font-medium text-gray-800">{message.sender}</span>
-                      {getSentimentBadge(message.sentiment)}
-                      <span className="text-xs text-gray-500">{message.timestamp}</span>
+                      <span className="font-medium text-gray-800">
+                        {getAnonymizedName(message.student.profile.roll_no)}
+                      </span>
+                      {getSentimentBadge(message.sentiment_label)}
+                      <span className="text-xs text-gray-500">
+                        {format(new Date(message.created_at), 'HH:mm')}
+                      </span>
                     </div>
                     <p className="text-gray-700">{message.message}</p>
                   </div>
@@ -128,6 +302,7 @@ const StudentGroupChat: React.FC = () => {
                 </div>
               </div>
             ))}
+            <div ref={messagesEndRef} />
           </div>
 
           {/* Message Input */}
@@ -136,11 +311,12 @@ const StudentGroupChat: React.FC = () => {
               <Input
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type your message... (You'll appear as Anon-005)"
+                placeholder={`Type your message... (You'll appear as ${getAnonymizedName(profile?.roll_no || 'Unknown')})`}
                 onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                 className="flex-1"
+                maxLength={500}
               />
-              <Button onClick={handleSendMessage} className="px-6">
+              <Button onClick={handleSendMessage} disabled={!newMessage.trim()} className="px-6">
                 <Send className="w-4 h-4" />
               </Button>
             </div>

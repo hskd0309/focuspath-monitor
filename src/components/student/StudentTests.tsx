@@ -1,58 +1,156 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
 import { BookOpen, Calendar, Clock, TrendingUp, Target } from 'lucide-react';
-import { studentData } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import { format } from 'date-fns';
+
+interface Test {
+  id: string;
+  title: string;
+  test_date: string;
+  max_marks: number;
+  subject: {
+    name: string;
+    code: string;
+  };
+  result?: {
+    marks_obtained: number;
+  };
+}
+
+interface TestResult {
+  id: string;
+  marks_obtained: number;
+  test: {
+    title: string;
+    max_marks: number;
+    subject: {
+      name: string;
+      code: string;
+    };
+  };
+}
 
 const StudentTests: React.FC = () => {
+  const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState('marks');
+  const [tests, setTests] = useState<Test[]>([]);
+  const [testResults, setTestResults] = useState<TestResult[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const testMarks = [
-    { subject: 'Mathematics', midterm: 85, final: 88, average: 86.5 },
-    { subject: 'Physics', midterm: 78, final: 82, average: 80 },
-    { subject: 'Chemistry', midterm: 82, final: 85, average: 83.5 },
-    { subject: 'English', midterm: 75, final: 78, average: 76.5 },
-    { subject: 'Computer Science', midterm: 90, final: 92, average: 91 }
-  ];
-
-  const upcomingTests = [
-    {
-      id: '1',
-      subject: 'Mathematics',
-      type: 'Unit Test',
-      date: '2024-09-15',
-      time: '10:00 AM',
-      duration: '2 hours',
-      topics: ['Derivatives', 'Integration', 'Limits']
-    },
-    {
-      id: '2',
-      subject: 'Physics',
-      type: 'Lab Test',
-      date: '2024-09-18',
-      time: '2:00 PM',
-      duration: '1.5 hours',
-      topics: ['Optics', 'Wave Motion']
-    },
-    {
-      id: '3',
-      subject: 'Chemistry',
-      type: 'Monthly Test',
-      date: '2024-09-22',
-      time: '9:00 AM',
-      duration: '2 hours',
-      topics: ['Organic Chemistry', 'Reaction Mechanisms']
+  useEffect(() => {
+    if (profile?.role === 'student') {
+      fetchTestData();
     }
-  ];
+  }, [profile]);
 
-  const chartData = testMarks.map(subject => ({
-    subject: subject.subject.substring(0, 8),
-    midterm: subject.midterm,
-    final: subject.final
-  }));
+  const fetchTestData = async () => {
+    try {
+      setLoading(true);
+
+      // Get student record
+      const { data: studentData } = await supabase
+        .from('students')
+        .select('id')
+        .eq('profile_id', profile?.id)
+        .single();
+
+      if (!studentData) return;
+
+      // Fetch upcoming tests
+      const { data: testsData } = await supabase
+        .from('tests')
+        .select(`
+          id,
+          title,
+          test_date,
+          max_marks,
+          subjects:subject_id (
+            name,
+            code
+          )
+        `)
+        .eq('class', profile?.class)
+        .gte('test_date', new Date().toISOString().split('T')[0])
+        .order('test_date', { ascending: true });
+
+      // Fetch test results
+      const { data: resultsData } = await supabase
+        .from('test_results')
+        .select(`
+          id,
+          marks_obtained,
+          tests:test_id (
+            title,
+            max_marks,
+            subjects:subject_id (
+              name,
+              code
+            )
+          )
+        `)
+        .eq('student_id', studentData.id);
+
+      if (testsData) setTests(testsData.map(test => ({ ...test, subject: test.subjects })));
+      if (resultsData) setTestResults(resultsData.map(result => ({ ...result, test: result.tests })));
+    } catch (error) {
+      console.error('Error fetching test data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const calculateStats = () => {
+    if (testResults.length === 0) {
+      return {
+        averageScore: 0,
+        totalTests: 0,
+        bestSubject: 'N/A',
+        chartData: []
+      };
+    }
+
+    const subjectPerformance = testResults.reduce((acc, result) => {
+      const subject = result.test?.subject?.name || 'Unknown';
+      const percentage = (result.marks_obtained / (result.test?.max_marks || 1)) * 100;
+      
+      if (!acc[subject]) {
+        acc[subject] = { total: 0, count: 0, marks: [] };
+      }
+      acc[subject].total += percentage;
+      acc[subject].count += 1;
+      acc[subject].marks.push(percentage);
+      
+      return acc;
+    }, {} as Record<string, { total: number; count: number; marks: number[] }>);
+
+    const chartData = Object.entries(subjectPerformance).map(([subject, data]) => ({
+      subject: subject.substring(0, 8),
+      average: Math.round(data.total / data.count),
+      latest: Math.round(data.marks[data.marks.length - 1] || 0)
+    }));
+
+    const averageScore = testResults.reduce((sum, result) => {
+      return sum + (result.marks_obtained / (result.test?.max_marks || 1)) * 100;
+    }, 0) / testResults.length;
+
+    const bestSubject = Object.entries(subjectPerformance).reduce((best, [subject, data]) => {
+      const avg = data.total / data.count;
+      return avg > best.score ? { subject, score: avg } : best;
+    }, { subject: 'N/A', score: 0 });
+
+    return {
+      averageScore: Math.round(averageScore),
+      totalTests: testResults.length,
+      bestSubject: bestSubject.subject,
+      chartData
+    };
+  };
 
   const getGradeColor = (score: number) => {
     if (score >= 90) return 'text-green-600';
@@ -79,13 +177,24 @@ const StudentTests: React.FC = () => {
     return `In ${diffDays} days`;
   };
 
-  const averageScore = testMarks.reduce((acc, subject) => acc + subject.average, 0) / testMarks.length;
+  const stats = calculateStats();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-fade-in p-4 md:p-6">
       {/* Header */}
       <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Tests & Examinations</h1>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-2 flex items-center justify-center gap-2">
+          <BookOpen className="w-6 md:w-8 h-6 md:h-8 text-blue-600" />
+          Tests & Examinations
+        </h1>
         <p className="text-gray-600">View your test performance and upcoming examinations</p>
       </div>
 
@@ -96,8 +205,8 @@ const StudentTests: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Average Score</p>
-                <p className={`text-3xl font-bold ${getGradeColor(averageScore)}`}>
-                  {averageScore.toFixed(1)}%
+                <p className={`text-3xl font-bold ${getGradeColor(stats.averageScore)}`}>
+                  {stats.averageScore}%
                 </p>
                 <p className="text-xs text-gray-500 mt-1">Overall performance</p>
               </div>
@@ -111,8 +220,8 @@ const StudentTests: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Best Subject</p>
-                <p className="text-lg font-bold text-green-600">CS</p>
-                <p className="text-xs text-gray-500 mt-1">91% average</p>
+                <p className="text-lg font-bold text-green-600">{stats.bestSubject}</p>
+                <p className="text-xs text-gray-500 mt-1">Top performer</p>
               </div>
               <TrendingUp className="w-8 h-8 text-green-600" />
             </div>
@@ -124,7 +233,7 @@ const StudentTests: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Tests Taken</p>
-                <p className="text-3xl font-bold text-purple-600">{testMarks.length * 2}</p>
+                <p className="text-3xl font-bold text-purple-600">{stats.totalTests}</p>
                 <p className="text-xs text-gray-500 mt-1">This semester</p>
               </div>
               <BookOpen className="w-8 h-8 text-purple-600" />
@@ -137,7 +246,7 @@ const StudentTests: React.FC = () => {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Upcoming</p>
-                <p className="text-3xl font-bold text-orange-600">{upcomingTests.length}</p>
+                <p className="text-3xl font-bold text-orange-600">{tests.length}</p>
                 <p className="text-xs text-gray-500 mt-1">Tests scheduled</p>
               </div>
               <Calendar className="w-8 h-8 text-orange-600" />
@@ -151,64 +260,74 @@ const StudentTests: React.FC = () => {
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="marks" className="flex items-center gap-2">
             <BookOpen className="w-4 h-4" />
-            Test Marks
+            Test Results
           </TabsTrigger>
           <TabsTrigger value="portal" className="flex items-center gap-2">
             <Calendar className="w-4 h-4" />
-            Test Portal
+            Upcoming Tests
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="marks" className="space-y-6">
           {/* Performance Chart */}
-          <Card className="chart-container">
-            <CardHeader>
-              <CardTitle>Subject-wise Performance</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="subject" stroke="#6b7280" />
-                  <YAxis stroke="#6b7280" />
-                  <Bar dataKey="midterm" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Midterm" />
-                  <Bar dataKey="final" fill="#06b6d4" radius={[4, 4, 0, 0]} name="Final" />
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
+          {stats.chartData.length > 0 && (
+            <Card className="chart-container">
+              <CardHeader>
+                <CardTitle>Subject-wise Performance</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={stats.chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="subject" stroke="#6b7280" />
+                    <YAxis stroke="#6b7280" />
+                    <Bar dataKey="average" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Average" />
+                    <Bar dataKey="latest" fill="#06b6d4" radius={[4, 4, 0, 0]} name="Latest" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* Detailed Marks Table */}
+          {/* Detailed Results */}
           <Card className="dashboard-card">
             <CardHeader>
-              <CardTitle>Detailed Test Results</CardTitle>
+              <CardTitle>Test Results</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {testMarks.map((subject, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <BookOpen className="w-6 h-6 text-blue-600" />
+                {testResults.length > 0 ? testResults.map((result) => {
+                  const percentage = Math.round((result.marks_obtained / (result.test?.max_marks || 1)) * 100);
+                  return (
+                    <div key={result.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <BookOpen className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="font-semibold text-gray-800">{result.test?.title}</h3>
+                          <p className="text-sm text-gray-600">
+                            {result.test?.subject?.name} | {result.marks_obtained}/{result.test?.max_marks}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <h3 className="font-semibold text-gray-800">{subject.subject}</h3>
-                        <p className="text-sm text-gray-600">
-                          Midterm: {subject.midterm}% | Final: {subject.final}%
-                        </p>
+                      <div className="flex items-center space-x-4">
+                        <div className="text-right">
+                          <p className={`text-2xl font-bold ${getGradeColor(percentage)}`}>
+                            {percentage}%
+                          </p>
+                          <p className="text-xs text-gray-500">Score</p>
+                        </div>
+                        {getGradeBadge(percentage)}
                       </div>
                     </div>
-                    <div className="flex items-center space-x-4">
-                      <div className="text-right">
-                        <p className={`text-2xl font-bold ${getGradeColor(subject.average)}`}>
-                          {subject.average}%
-                        </p>
-                        <p className="text-xs text-gray-500">Average</p>
-                      </div>
-                      {getGradeBadge(subject.average)}
-                    </div>
+                  );
+                }) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <BookOpen className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p>No test results available yet</p>
                   </div>
-                ))}
+                )}
               </div>
             </CardContent>
           </Card>
@@ -222,45 +341,30 @@ const StudentTests: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {upcomingTests.map((test) => (
+                {tests.length > 0 ? tests.map((test) => (
                   <div key={test.id} className="p-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
                     <div className="flex items-start justify-between">
-                      <div className="space-y-3">
+                      <div className="space-y-3 flex-1">
                         <div>
-                          <h3 className="text-lg font-semibold text-gray-800">{test.subject}</h3>
-                          <p className="text-blue-600 font-medium">{test.type}</p>
+                          <h3 className="text-lg font-semibold text-gray-800">{test.title}</h3>
+                          <p className="text-blue-600 font-medium">{test.subject?.name}</p>
                         </div>
                         
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                           <div className="flex items-center space-x-2">
                             <Calendar className="w-4 h-4 text-gray-500" />
-                            <span className="text-gray-600">{test.date}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Clock className="w-4 h-4 text-gray-500" />
-                            <span className="text-gray-600">{test.time}</span>
+                            <span className="text-gray-600">{format(new Date(test.test_date), 'MMM dd, yyyy')}</span>
                           </div>
                           <div className="flex items-center space-x-2">
                             <Target className="w-4 h-4 text-gray-500" />
-                            <span className="text-gray-600">{test.duration}</span>
-                          </div>
-                        </div>
-
-                        <div>
-                          <p className="text-sm font-medium text-gray-700 mb-2">Topics:</p>
-                          <div className="flex flex-wrap gap-2">
-                            {test.topics.map((topic, idx) => (
-                              <Badge key={idx} variant="outline" className="text-xs">
-                                {topic}
-                              </Badge>
-                            ))}
+                            <span className="text-gray-600">Max Marks: {test.max_marks}</span>
                           </div>
                         </div>
                       </div>
                       
-                      <div className="text-right">
+                      <div className="text-right ml-4">
                         <Badge className="bg-orange-100 text-orange-800 mb-2">
-                          {getDaysUntilTest(test.date)}
+                          {getDaysUntilTest(test.test_date)}
                         </Badge>
                         <div className="space-y-2">
                           <Button size="sm" className="w-full">
@@ -273,7 +377,12 @@ const StudentTests: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                    <p>No upcoming tests scheduled</p>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
