@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Calendar, Clock, CheckCircle, AlertCircle, BookOpen, TrendingUp } from 'lucide-react';
+import { Calendar, Clock, CheckCircle, AlertCircle, BookOpen, TrendingUp, FileText } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -179,6 +179,21 @@ const StudentAssignments: React.FC = () => {
     return days;
   };
 
+  const getStatusIcon = (assignment: Assignment) => {
+    if (assignment.submission) {
+      return <CheckCircle className="w-5 h-5 text-green-600" />;
+    }
+    const isOverdue = new Date() > new Date(assignment.due_date);
+    if (isOverdue) {
+      return <AlertCircle className="w-5 h-5 text-red-600" />;
+    }
+    return <Clock className="w-5 h-5 text-yellow-600" />;
+  };
+
+  // Derived data for UI
+  const upcomingAssignments = assignments.filter(a => !a.submission && new Date(a.due_date) >= new Date());
+  const completedAssignments = assignments.filter(a => a.submission);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -255,10 +270,10 @@ const StudentAssignments: React.FC = () => {
                   {getStatusIcon(assignment)}
                   <div>
                     <h3 className="font-semibold text-gray-800">{assignment.title}</h3>
-                    <p className="text-sm text-gray-600">{assignment.subject}</p>
+                    <p className="text-sm text-gray-600">{assignment.subject?.name || 'No Subject'}</p>
                     <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
                       <Calendar className="w-3 h-3" />
-                      {getDaysUntilDue(assignment.dueDate)}
+                      Due in {getDaysUntilDue(assignment.due_date)} days
                     </p>
                   </div>
                 </div>
@@ -296,10 +311,10 @@ const StudentAssignments: React.FC = () => {
                   <CheckCircle className="w-5 h-5 text-green-600" />
                   <div>
                     <h3 className="font-semibold text-gray-800">{assignment.title}</h3>
-                    <p className="text-sm text-gray-600">{assignment.subject}</p>
+                    <p className="text-sm text-gray-600">{assignment.subject?.name || 'No Subject'}</p>
                     <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
                       <Calendar className="w-3 h-3" />
-                      Submitted on {assignment.dueDate}
+                      Submitted on {format(new Date(assignment.submission?.submitted_at || assignment.due_date), 'MMM dd, yyyy')}
                     </p>
                   </div>
                 </div>
